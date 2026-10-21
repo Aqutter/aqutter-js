@@ -1,0 +1,29 @@
+{
+  "name": "@aqutter/aqutter",
+  "version": "0.0.0",
+  "private": false,
+  "description": "Flutter WebView 橋接：框架中立的網頁端 client 與跨層契約（handler / event 名稱與型別）。",
+  "type": "module",
+  "sideEffects": [
+    "./src/nativeview/register.ts"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./contract": "./src/contract/index.ts",
+    "./native": "./src/nativeview/register.ts"
+  },
+  "license": "Apache-2.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "happy-dom": "^17.0.0"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ]
+}

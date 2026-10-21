@@ -1,0 +1,10 @@
+Aqutter
+
+Copyright 2026 KNightING
+依 Apache License, Version 2.0 授權（見 LICENSE）。
+
+本 repo 的 shell/ 在執行期相依 aqutter_core（https://github.com/Aqutter/aqutter_core）；
+該套件衍生自 flutter_inappwebview（https://github.com/pichillilorenzo/flutter_inappwebview，
+Copyright 2023 Lorenzo Pichilli，Apache-2.0），出處與變更見該 repo 的 NOTICE。
+shell/assets/fonts 內的字型各依其原授權散佈：Noto Sans / Noto Sans CJK（SIL OFL 1.1）、
+Cubic 11（SIL OFL 1.1）。
