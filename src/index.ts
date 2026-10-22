@@ -91,7 +91,7 @@ export interface BridgeNameMismatch {
    * 平台不支援（如桌面的 statusbar_*）也會落在此，故需人工判讀，不屬於錯誤。
    */
   missingOnHost: readonly string[]
-  /** host 提供、網頁端沒宣告的 handler。這一類**沒有**正常情況：就是漏加或拼錯。 */
+  /** host 提供、網頁端沒宣告的核心 handler（不含 plugin 的 `<id>.<method>`）。這一類**沒有**正常情況：就是漏加或拼錯。 */
   missingOnWeb: readonly string[]
 }
 
@@ -131,7 +131,9 @@ export const setBridgeCapabilities = (
   const webNames = new Set<string>(Object.values(BridgeHandler))
 
   const missingOnHost = [...webNames].filter(name => !hostNames.has(name))
-  const missingOnWeb = [...hostNames].filter(name => !webNames.has(name))
+  // plugin 的 handler 名稱是 `<plugin id>.<method>`（見 pluginHandlerName），宣告在各 plugin 自己的契約，
+  // 不在核心的 BridgeHandler 表裡；plugin id 不含 `.`、核心名稱也沒有 `.`，所以含 `.` 的一律不算「漏宣告」。
+  const missingOnWeb = [...hostNames].filter(name => !webNames.has(name) && !name.includes('.'))
   if (missingOnHost.length === 0 && missingOnWeb.length === 0) {
     return
   }
