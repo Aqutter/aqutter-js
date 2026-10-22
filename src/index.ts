@@ -253,8 +253,37 @@ export const pluginHandlerName = (pluginId: string, method: string): string => `
 export const pluginEventChannel = (pluginId: string, event: string): string => `${pluginId}.${event}`
 
 /**
+ * 殼對 plugin 呼叫失敗時回傳的保留格式：`{ aqutterError: { code, message } }`（例如 plugin 不支援本平台時的
+ * `UNSUPPORTED_PLATFORM`）。用資料而不是例外回報，因為例外怎麼傳回網頁取決於各原生平台的實作，
+ * 殼端無法對每個平台保證 Promise 會 reject。`aqutterError` 是保留欄位，plugin 自己的回傳不得使用。
+ */
+export class AqutterPluginError extends Error {
+  readonly code: string
+
+  constructor(code: string, message: string) {
+    super(`${code}: ${message}`)
+    this.name = 'AqutterPluginError'
+    this.code = code
+  }
+}
+
+/** 結果若是殼的保留格式錯誤資料就轉成 {@link AqutterPluginError}；格式不符（欄位型別不對）一律當一般結果。 */
+const pluginErrorOf = (result: unknown): AqutterPluginError | null => {
+  if (typeof result !== 'object' || result === null || !('aqutterError' in result)) {
+    return null
+  }
+  const error = (result as { aqutterError: unknown }).aqutterError
+  if (typeof error !== 'object' || error === null) {
+    return null
+  }
+  const { code, message } = error as { code?: unknown, message?: unknown }
+  return typeof code === 'string' && typeof message === 'string' ? new AqutterPluginError(code, message) : null
+}
+
+/**
  * 呼叫 plugin 方法（未型別化）。plugin 沒有發佈契約，或在 Flutter 之外時使用；
  * 非 Flutter 環境直接拋錯，與 {@link callFlutter} 一致。
+ * 殼回傳 `aqutterError`（見 {@link AqutterPluginError}）時拋出該錯誤，其餘結果原樣回傳。
  */
 export const callPluginRaw = async (pluginId: string, method: string, payload?: unknown): Promise<unknown> => {
   const flutter = getFlutter()
@@ -262,7 +291,12 @@ export const callPluginRaw = async (pluginId: string, method: string, payload?: 
   if (!flutter) {
     throw new Error(`[flutterBridge] callPlugin(${name}) is only available inside Flutter`)
   }
-  return flutter.callHandler(name, payload ?? {})
+  const result = await flutter.callHandler(name, payload ?? {})
+  const error = pluginErrorOf(result)
+  if (error) {
+    throw error
+  }
+  return result
 }
 
 /** 呼叫 plugin 方法；型別由 {@link AqutterPluginRegistry} 決定。 */
@@ -297,6 +331,8 @@ export const onPluginEvent = <Id extends RegistryId, E extends keyof EventsOf<Id
 /**
  * plugin 方法在本平台是否可用。能力表尚未取得時視為支援（理由同 {@link isBridgeSupported}）。
  * plugin 的 handler 一律列入 host 的能力表，故沒裝該 plugin 的 App 會得到 false。
+ * plugin 若宣告 `supportedPlatforms`（Dart 端 `AqutterPlugin`），在不支援的平台上其 handler 仍會註冊、
+ * 但**不列入**能力表，所以這裡回 false；此時直接呼叫會得到 {@link AqutterPluginError}（`UNSUPPORTED_PLATFORM`）。
  */
 export const isPluginSupported = (pluginId: string, method: string): boolean => {
   if (!isFlutter()) {

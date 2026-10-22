@@ -9,6 +9,7 @@ Aqutter 殼的網頁端 client：npm 套件 `@aqutter/aqutter`，框架中立（
 - **鏡像協定兩端成對**：`src/nativeview/{frame,gestures}.ts` 對應 `Aqutter/aqutter_core` 的 `native_frame.dart`。
 - **版本對應以 manifest 為準**：改動後要更新 `Aqutter/aqutter` 的 `manifest/releases.json` 的 `client.spec`（commit sha）。
 - **套件名不改**：`@aqutter/aqutter`。
+- **`aqutterError` 是保留欄位**：殼對 plugin 呼叫失敗（例如不支援本平台）回傳 `{ aqutterError: { code, message } }`，`callPlugin` 轉成 `AqutterPluginError`；plugin 自己的回傳不得使用這個欄位名。
 - **安裝**：`github:Aqutter/aqutter-js#<ref>`（repo 根目錄；npm、pnpm、yarn 皆可，bun 尚未驗證）。開發階段版本 tag `0.0.0` 隨 `main` 前進。
 - **開發階段直接推送 `main`**，不開 PR／milestone／版本分支（本 repo 目前如此）。
 
