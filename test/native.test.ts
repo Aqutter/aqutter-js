@@ -209,3 +209,42 @@ describe('AqutterNative', () => {
     expect(ws.messages.filter(message => message.type === 'visibility')).toEqual([{ type: 'visibility', visible: false }])
   })
 })
+
+describe('AqutterNative connection failure hint', () => {
+  beforeEach(() => {
+    FakeSocket.instances = []
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  const closeNext = async (): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(1000)
+    const socket = FakeSocket.instances.at(-1) as FakeSocket
+    socket.onclose?.()
+  }
+
+  it('warns once about CSP after repeated connects that never open', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    setup()
+    for (let i = 0; i < 5; i++) {
+      await closeNext()
+    }
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('ws://127.0.0.1:*')
+    warn.mockRestore()
+  })
+
+  it('stays quiet when the connection opens', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    setup()
+    await vi.advanceTimersByTimeAsync(10)
+    ;(FakeSocket.instances.at(-1) as FakeSocket).onopen?.()
+    await closeNext()
+    await closeNext()
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})

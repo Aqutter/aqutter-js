@@ -51,6 +51,8 @@ export interface AqutterNativeOptions {
 }
 
 const DEFAULT_RECONNECT_MS = 800
+/** 連續幾次「連線還沒打開就被關掉」後，提示可能是 CSP 擋掉。 */
+const CONNECT_FAILURE_HINT_AFTER = 3
 
 /** 排程下一次繪製；沒有 `requestAnimationFrame` 的環境退回 setTimeout。 */
 const scheduleFrame = (callback: () => void): void => {
@@ -93,6 +95,9 @@ export class AqutterNative {
   private lastReported = ''
   private visible = true
   private lastVisibleSent: boolean | null = null
+  /** 連續「未曾打開就關閉」的次數；打開過即歸零。 */
+  private failedConnects = 0
+  private connectHintShown = false
 
   constructor(private readonly options: AqutterNativeOptions) {
     const context = options.canvas.getContext('2d')
@@ -200,6 +205,21 @@ export class AqutterNative {
     }, this.options.reconnectMs ?? DEFAULT_RECONNECT_MS)
   }
 
+  /**
+   * 連線還沒打開就被關掉。網頁若設了 CSP 而 `connect-src` 沒放行 `ws://127.0.0.1:*`，瀏覽器會靜默擋掉
+   * 這條 WebSocket，畫面只會是空白、沒有任何錯誤——連續失敗幾次後提示一次，讓人知道去查 CSP。
+   */
+  private noteConnectFailure(url: string): void {
+    this.failedConnects += 1
+    if (this.failedConnects < CONNECT_FAILURE_HINT_AFTER || this.connectHintShown) {
+      return
+    }
+    this.connectHintShown = true
+    const target = url.replace(/\?.*$/, '')
+    console.warn(`[aqutterNative] 連線 ${target} 連續失敗 ${this.failedConnects} 次。若網頁設了 Content-Security-Policy，`
+      + '`connect-src` 需要允許 `ws://127.0.0.1:*`，否則連線會被靜默擋掉、畫面只會是空白（見 docs/nativeview.md 的「網頁的 CSP」）。')
+  }
+
   private async connect(): Promise<void> {
     let endpoint: AqutterNativeEndpoint
     try {
@@ -216,7 +236,10 @@ export class AqutterNative {
     const socket = new WebSocket(url)
     socket.binaryType = 'arraybuffer'
     this.socket = socket
+    let opened = false
     socket.onopen = () => {
+      opened = true
+      this.failedConnects = 0
       // 新連線：序號與尺寸回報都重來（原生端的工作階段可能重建過）
       this.lastSeq = -1
       this.awaitingPayload = null
@@ -234,6 +257,9 @@ export class AqutterNative {
     socket.onclose = () => {
       if (this.socket === socket) {
         this.socket = null
+      }
+      if (!opened) {
+        this.noteConnectFailure(url)
       }
       this.pending = null
       this.awaitingPayload = null
