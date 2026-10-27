@@ -31,9 +31,6 @@ import type {
   BundleCheckResult,
   BundleDownloadRequest,
   BundleInfo,
-  DbExecRequest,
-  DbExecResponse,
-  DbOpenRequest,
   DownloadProgressPayload,
   DownloadRequest,
   DownloadResponse,
@@ -107,8 +104,6 @@ export type BridgeContract = {
   [BridgeHandler.AppReady]: { req: NoPayload, res: OkResponse }
   [BridgeHandler.NativeEndpoint]: { req: NoPayload, res: NativeEndpoint }
 
-  [BridgeHandler.DbOpen]: { req: DbOpenRequest, res: OkResponse }
-  [BridgeHandler.DbExec]: { req: DbExecRequest, res: DbExecResponse }
 
   [BridgeHandler.StoreGet]: { req: StoreGetRequest, res: StoreGetResponse }
   [BridgeHandler.StoreSet]: { req: StoreSetRequest, res: OkResponse }
