@@ -1,6 +1,6 @@
 # 2610271034 - binary-channel-and-channel-benchmarks
 
-- Created: 2026-10-27 10:34 / Archived: 2026-10-28 10:00
+- Created: 2026-10-27 10:34 / Archived: 2026-10-27 10:00
 - Issue: Aqutter/aqutter-js#3
 - Milestone: N/A / Base Branch: main
 
@@ -23,6 +23,7 @@
 - **[可測試性]** 核心是 `connectBinaryChannel(name, resolveEndpoint, options)`，`openBinaryChannel` 只是接上 `callFlutter(native_endpoint)`。
 
 ## Deviations
+- 歸檔日期更正：原寫 `2026-10-28`（誤用日期），更正為 `2026-10-27`。
 - 未歸檔就合併：PR #4 合併時尚未歸檔，歸檔另開 PR 補上；本 repo 沒有 wiki。
 - 單元測試只用假的 `WebSocket`；真實路徑事後在 Android 實機驗證（`openBinaryChannel` 對真實通道）。
 
