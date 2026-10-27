@@ -39,7 +39,6 @@ import type {
   HttpAbortRequest,
   HttpFetchRequest,
   HttpFetchResponse,
-  NativeEndpoint,
   LocaleResponse,
   LogAppendRequest,
   LogDirResponse,
@@ -102,7 +101,6 @@ interface BridgeSpec {
 export type BridgeContract = {
   [BridgeHandler.PlatformInfo]: { req: NoPayload, res: PlatformInfo }
   [BridgeHandler.AppReady]: { req: NoPayload, res: OkResponse }
-  [BridgeHandler.NativeEndpoint]: { req: NoPayload, res: NativeEndpoint }
 
 
   [BridgeHandler.StoreGet]: { req: StoreGetRequest, res: StoreGetResponse }
