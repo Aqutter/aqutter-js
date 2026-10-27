@@ -13,7 +13,7 @@ import type { AppKey } from './models/key'
 import type { PermissionStatus, PermissionType } from './models/permission'
 import type { FilePickerMode, FilePickerOptions } from './models/filePicker'
 
-/** JS→原生：`window.aqutter.callHandler(name, payload)` 的 handler 名稱。 */
+/** JS→原生：handler 名稱（經多工連線送出；只有 `native_endpoint` 走 `window.aqutter.callHandler`）。 */
 export enum BridgeHandler {
   /** 啟動時取得平台資訊（OS / 版本 / 是否行動端）。 */
   PlatformInfo = 'platform_info',
@@ -141,7 +141,7 @@ export enum LogLevel {
   Error = 'error',
 }
 
-/** 原生→JS：透過 `window.__flutterBridgeEmit(channel, payload)` 派送的事件頻道名稱。 */
+/** 原生→JS：經多工連線以 `evt` 訊框派送的事件頻道名稱。 */
 export enum BridgeEvent {
   /** 電量狀態更新。 */
   Battery = 'broadcast_battery',
