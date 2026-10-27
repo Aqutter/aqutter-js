@@ -1,6 +1,6 @@
 # Tasks for 2610271034
 
-- [ ] `src/channel.ts`：`openBinaryChannel`、`BinaryChannel`
-- [ ] 匯出與 README
-- [ ] `test/channel.test.ts`
-- [ ] `pnpm typecheck`、`pnpm test`
+- [x] `src/channel.ts`：`openBinaryChannel`、`BinaryChannel`
+- [x] 匯出與 README
+- [x] `test/channel.test.ts`
+- [x] `pnpm typecheck`、`pnpm test`

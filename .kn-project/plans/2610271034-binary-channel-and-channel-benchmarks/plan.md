@@ -2,10 +2,10 @@
 # Plan: 2610271034 - binary-channel-and-channel-benchmarks
 - Created: 2026-10-27
 - Branch: feature/2610271034-binary-channel-and-channel-benchmarks
-- Issue: 待建立（Phase 2 核准後）
+- Issue: Aqutter/aqutter-js#3
 - Milestone: N/A（未指定）
 - Base Branch: main
-- Status: Planning
+- Status: In Progress
 - Completed: [Wait for Finish]
 
 ## Goals
@@ -26,7 +26,7 @@
 - **本計畫所屬 repo**: `Aqutter/aqutter-js`
 
 ## Contract / 介面契約
-- **契約正本 repo**: `Aqutter/aqutter`　**修訂號**: `rev 1`　**狀態**: `草擬`
+- **契約正本 repo**: `Aqutter/aqutter`　**修訂號**: `rev 1`　**狀態**: `凍結（核准日 2026-10-27）`
 
 ### 1. 連線（`Aqutter/aqutter_core` 的 `AqutterNativeHost`）
 | 項目 | 值 |
@@ -101,7 +101,10 @@
 - **[假設]** Windows 鏡像約 26 fps 的上限可能是這條 WebSocket 下行（每幀約 1.7 MB × 26 fps ≈ 44 MB/s，與量到的下行上限吻合），而不是先前判斷的畫面讀回。要在 Windows 調查任務中驗證，不得在驗證前當成結論。
 - **[v1 範圍]** 只做二進位、不做背壓與自動重連；背壓策略在實作中以測試決定，有結論才寫進文件。
 - **[基準工具]** 保存在 `Aqutter/aqutter` 的 `tools/channel-bench/`，量測結果寫進 `docs/channel-performance.md` — 理由：工具要能在各平台重跑，結果要有出處。
-- **[執行模式]** 序列。**[完成後]** 待核准閘決定。
+- **[契約]** rev 1 凍結（核准日 2026-10-27）。
+- **[完成後]** commit + 開 PR（併回 `main`；使用者核准時未更動預設）。
+- **[Windows 調查停損]** 同意：原因若在 WebView2 或 `dart:io` 本身而我們改不動，只記錄並提供 workaround。
+- **[執行模式]** 序列。
 
 ## Git Completion Policy
 - PR 一律以 `--base main` 顯式指定；commit 與 PR body 含 `Closes #N`。

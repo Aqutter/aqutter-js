@@ -341,4 +341,5 @@ export const isPluginSupported = (pluginId: string, method: string): boolean => 
   return capabilities === null || capabilities.has(pluginHandlerName(pluginId, method))
 }
 
+export * from './channel'
 export * from './nativeview'
