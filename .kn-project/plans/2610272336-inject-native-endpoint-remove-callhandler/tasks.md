@@ -16,4 +16,4 @@
 - [x] [aqutter-js] `pnpm test` 與型別檢查（`pnpm exec tsc --noEmit`）全過；`git grep -n "callHandler\|native_endpoint\|NativeEndpoint" -- src` 無命中
 
 ## Phase 4 — 整合驗證
-- [ ] [aqutter-js] 與殼整合：`aqutter-nuxt-app`／`demo-app` 在 iPad、Android、macOS 上傳輸連得上　需等待 [aqutter]：殼端注入完成並通過其驗證
+- [x] [aqutter-js] 與殼整合：`aqutter-nuxt-app`／`demo-app` 在 iPad、Android、macOS 上傳輸連得上　需等待 [aqutter]：殼端注入完成並通過其驗證

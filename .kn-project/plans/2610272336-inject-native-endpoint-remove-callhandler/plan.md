@@ -5,7 +5,7 @@
 - Issue: Aqutter/aqutter-js#12
 - Milestone: N/A（未指定）
 - Base Branch: main
-- Status: In Progress
+- Status: Awaiting Archive
 - Completed: [Wait for Finish]
 
 ## Goals
@@ -29,7 +29,7 @@
 - **跨 repo 檔案指涉**: 見 `## Impact Files` 之外的「他 repo」項目：`demo-app/dbltest.html:44`（不在任何 git repo，非治理範圍，見 Q2）。
 
 ## Contract / 介面契約
-- **契約正本 repo**: `aqutter`　**修訂號**: `rev 2`　**狀態**: `凍結（核准日 2026-10-27）`
+- **契約正本 repo**: `aqutter`　**修訂號**: `rev 3`　**狀態**: `凍結（核准日 2026-10-28）`
 
 ### 1. 介面清單
 | # | 種類 | 名稱 | 提供方 | 消費方 | 用途 |
@@ -64,7 +64,7 @@
 | 情況 | 觸發條件 | client 預期行為 |
 |---|---|---|
 | 全域不存在 | 純瀏覽器、SSR、殼尚未注入 | `isFlutter()` 回 `false`；不嘗試連線（與現行非 Flutter 環境相同） |
-| 端點過期 | 殼重啟伺服器後，頁面仍持有舊值 | 連線失敗；`Transport` 既有重連（`reconnectMs` 預設 800 ms）每次嘗試都**重新讀取** `window.aqutterEndpoint`；進行中的呼叫仍以 `TRANSPORT_CLOSED` 失敗（行為不變） |
+| 端點過期 | 殼重啟伺服器後，頁面仍持有舊值 | 連線失敗；`Transport` 既有的退避重連（起始 200 ms、每次加倍、上限 5 秒；`<aqutter-native>` 鏡像元素自己的重連間隔預設 800 ms）每次嘗試都**重新讀取** `window.aqutterEndpoint`；進行中的呼叫仍以 `TRANSPORT_CLOSED` 失敗（行為不變） |
 | 舊 client 搭新殼 | 舊 client 呼叫 `native_endpoint` | 殼不再註冊該 handler，連線建立不了；不提供相容（見 §5） |
 
 ### 4. 狀態與規則
@@ -82,6 +82,7 @@
 
 ### 6. 變更紀錄
 - 2026-10-27　rev 2：新增介面 #4（`AqutterNativeOptions.resolveEndpoint` 改選填，預設讀全域）與 §5 說明。原因：`docs/nativeview.md:67` 的公開用法以 `callFlutter(BridgeHandler.NativeEndpoint)` 作為 `resolveEndpoint`，移除 `NativeEndpoint` 後必須有替代。影響 repo：`aqutter-js`（程式）、`aqutter`（文件）；`aqutter_core` 無程式影響。
+- 2026-10-28　rev 3（更正，不改介面）：§3「端點過期」列的重連間隔由「`Transport` 預設 800 ms」更正為 `Transport` 的退避（200 ms 起、上限 5 秒，`transport.ts:63-64`）；800 ms 是鏡像元素的預設。原因：Phase 4 契約一致性檢查發現數字寫錯。影響 repo：無（行為與介面都不變）。
 
 ## Impact Files
 - `src/index.ts:15` (檔頭說明「`callHandler` 只用來取得連線資訊」)、`:21-26` (`interface AqutterBridge`)、`:36-47` (`getFlutter`、`isFlutter`)、`:50-60` (`getTransport` 的 `resolveEndpoint`)、`:96-106` (`callFlutter` 對 `NativeEndpoint` 的特例)、`:181`、`:256`、`:296`（`isFlutter()`／`getFlutter()` 使用處）— 改為讀 `window.aqutterEndpoint`，移除 `callHandler`。
@@ -134,6 +135,8 @@
 - **[契約]** rev 2 凍結（使用者於重新核准閘核准）。
 - **[補列]** `.kn-project/project.md`（第 11、30 行）補進 `## Impact Files`，使用者於實作中重新核准。
 - **[順序]** Phase 1（補齊 wiki）排在 Phase 2–3 之後、commit 之前執行 — 理由：wiki 描述的是完成後的現況；使用者核准（2026-10-27）。
+- **[契約變更]** rev 2 → 3（已核准並凍結，2026-10-28）：更正 §3 的重連間隔數字（Phase 4 契約一致性檢查發現，Rule 29）；介面與行為不變。
+- **[契約]** rev 3 凍結（使用者於 2026-10-28 核准，只更正 §3 的重連間隔數字）。
 
 ## Git Completion Policy
 - PR 一律以 `--base main` 顯式指定 base，不依賴 `gh` 的預設值 (Rule 23)。
