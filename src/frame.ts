@@ -10,7 +10,7 @@
  * 酬載 `p` 內的 `ArrayBuffer`／`ArrayBufferView` 送出時抽成 blob，並換成 `{"$bin": i}`；解碼時還原成 `Uint8Array`。
  */
 
-export type FrameType = 'call' | 'res' | 'err' | 'evt'
+export type FrameType = 'call' | 'res' | 'err' | 'evt' | 'part'
 
 export interface Frame {
   t: FrameType
@@ -24,10 +24,26 @@ export interface Frame {
   p?: unknown
   /** 錯誤（`err`）。 */
   e?: { code: string, message: string }
+  /** `part`：片序（0 起算）、總片數與這一片的位元組；`id` 是分段訊息編號。 */
+  seq?: number
+  total?: number
+  data?: Uint8Array
 }
 
-/** 單一訊框的大小上限（位元組）。 */
+/** 單一 WebSocket 訊息的大小上限（位元組）。 */
 export const MAX_FRAME_BYTES = 64 * 1024 * 1024
+
+/** 邏輯訊框的大小上限：超過 {@link MAX_FRAME_BYTES} 的由傳輸層自動分段。 */
+export const MAX_MESSAGE_BYTES = 512 * 1024 * 1024
+
+/** 分段時每一片的大小（最後一片較短）。 */
+export const PART_BYTES = 16 * 1024 * 1024
+
+/** 一個分段訊息最多幾片。 */
+export const MAX_PARTS = MAX_MESSAGE_BYTES / PART_BYTES
+
+/** 同一方向同時進行（尚未收齊）的分段訊息上限。 */
+export const MAX_PARTIAL_MESSAGES = 4
 
 /** 酬載中二進位佔位的保留鍵。 */
 const BINARY_KEY = '$bin'
@@ -40,7 +56,7 @@ export class FrameError extends Error {
   }
 }
 
-const FRAME_TYPES: readonly string[] = ['call', 'res', 'err', 'evt']
+const FRAME_TYPES: readonly string[] = ['call', 'res', 'err', 'evt', 'part']
 
 const isPlainContainer = (value: object): boolean => {
   if (Array.isArray(value)) {
@@ -75,8 +91,7 @@ const extractBlobs = (value: unknown, blobs: Uint8Array[]): unknown => {
   return value
 }
 
-/** 把 [frame] 編成可直接送出的位元組。超過 {@link MAX_FRAME_BYTES} 時拋出 {@link FrameError}。 */
-export const encodeFrame = (frame: Frame): Uint8Array => {
+const encodeRaw = (frame: Frame): Uint8Array => {
   const blobs: Uint8Array[] = []
   const header: Record<string, unknown> = { t: frame.t }
   if (frame.id !== undefined) {
@@ -94,6 +109,11 @@ export const encodeFrame = (frame: Frame): Uint8Array => {
   if (frame.e !== undefined) {
     header.e = { code: frame.e.code, message: frame.e.message }
   }
+  if (frame.t === 'part') {
+    header.seq = frame.seq
+    header.total = frame.total
+    blobs.push(frame.data!)
+  }
   header.blobs = blobs.map(blob => blob.length)
 
   const headerBytes = new TextEncoder().encode(JSON.stringify(header))
@@ -101,7 +121,7 @@ export const encodeFrame = (frame: Frame): Uint8Array => {
   for (const blob of blobs) {
     total += blob.length
   }
-  if (total > MAX_FRAME_BYTES) {
+  if (total > MAX_MESSAGE_BYTES) {
     throw new FrameError('Frame exceeds the size limit')
   }
   const out = new Uint8Array(total)
@@ -113,6 +133,33 @@ export const encodeFrame = (frame: Frame): Uint8Array => {
     offset += blob.length
   }
   return out
+}
+
+/** 把 [frame] 編成**單一** WebSocket 訊息。超過 {@link MAX_FRAME_BYTES} 時拋出 {@link FrameError}；可能超過的請用 {@link encodeMessages}。 */
+export const encodeFrame = (frame: Frame): Uint8Array => {
+  const bytes = encodeRaw(frame)
+  if (bytes.length > MAX_FRAME_BYTES) {
+    throw new FrameError('Frame exceeds the size limit')
+  }
+  return bytes
+}
+
+/**
+ * 把 [frame] 編成要依序送出的 WebSocket 訊息：≤ {@link MAX_FRAME_BYTES} 時只有一個（與 {@link encodeFrame} 相同）；
+ * 超過時切成每片 {@link PART_BYTES} 的 `part` 訊框，[partId] 是這個分段訊息在送出方向上的編號（不可重複）。
+ * 超過 {@link MAX_MESSAGE_BYTES} 拋出 {@link FrameError}。
+ */
+export const encodeMessages = (frame: Frame, partId: number): Uint8Array[] => {
+  const bytes = encodeRaw(frame)
+  if (bytes.length <= MAX_FRAME_BYTES) {
+    return [bytes]
+  }
+  const total = Math.ceil(bytes.length / PART_BYTES)
+  const messages: Uint8Array[] = []
+  for (let seq = 0; seq < total; seq++) {
+    messages.push(encodeRaw({ t: 'part', id: partId, seq, total, data: bytes.subarray(seq * PART_BYTES, Math.min((seq + 1) * PART_BYTES, bytes.length)) }))
+  }
+  return messages
 }
 
 const restoreBlobs = (value: unknown, blobs: Uint8Array[], used: Set<number>): unknown => {
@@ -139,9 +186,9 @@ const restoreBlobs = (value: unknown, blobs: Uint8Array[], used: Set<number>): u
 }
 
 /** 解碼一個訊框。格式錯誤一律拋出 {@link FrameError}。 */
-export const decodeFrame = (data: ArrayBuffer | Uint8Array): Frame => {
+export const decodeFrame = (data: ArrayBuffer | Uint8Array, maxBytes: number = MAX_FRAME_BYTES): Frame => {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data)
-  if (bytes.length > MAX_FRAME_BYTES) {
+  if (bytes.length > maxBytes) {
     throw new FrameError('Frame exceeds the size limit')
   }
   if (bytes.length < 4) {
@@ -195,6 +242,17 @@ export const decodeFrame = (data: ArrayBuffer | Uint8Array): Frame => {
   if ((name !== undefined && typeof name !== 'string') || (channel !== undefined && typeof channel !== 'string')) {
     throw new FrameError('"name" and "ch" must be strings')
   }
+  if (type === 'part') {
+    const seq = fields.seq
+    const total = fields.total
+    if (id === undefined || typeof seq !== 'number' || typeof total !== 'number' || !Number.isInteger(seq) || !Number.isInteger(total) || total < 2 || total > MAX_PARTS || seq < 0 || seq >= total) {
+      throw new FrameError(`"part" needs "id", "seq" and "total" (2..${MAX_PARTS})`)
+    }
+    if (blobs.length !== 1 || blobs[0]!.length > PART_BYTES || 'p' in fields) {
+      throw new FrameError('"part" carries exactly one blob of at most one part size')
+    }
+    return { t: 'part', id, seq, total, data: blobs[0]! }
+  }
   const error = fields.e
   const needs = (condition: boolean, message: string): void => {
     if (!condition) {
@@ -239,4 +297,65 @@ export const decodeFrame = (data: ArrayBuffer | Uint8Array): Frame => {
     frame.e = { code: String(code), message: String(message) }
   }
   return frame
+}
+
+/**
+ * 重組分段訊息：把收到的每個 WebSocket 訊息交給 {@link Reassembler.add}，完整的邏輯訊框會在收齊最後一片時回傳。
+ * 一個連線（一個方向）一個實例；分段違規一律拋出 {@link FrameError}，呼叫端應關閉連線。
+ */
+export class Reassembler {
+  private readonly partials = new Map<number, { total: number, parts: Uint8Array[], bytes: number }>()
+
+  /** 目前尚未收齊的分段訊息數。 */
+  get pending(): number {
+    return this.partials.size
+  }
+
+  add(message: ArrayBuffer | Uint8Array): Frame | null {
+    const frame = decodeFrame(message)
+    if (frame.t !== 'part') {
+      return frame
+    }
+    const id = frame.id!
+    const seq = frame.seq!
+    const total = frame.total!
+    let partial = this.partials.get(id)
+    if (!partial) {
+      if (seq !== 0) {
+        throw new FrameError('A part sequence must start at 0')
+      }
+      if (this.partials.size >= MAX_PARTIAL_MESSAGES) {
+        throw new FrameError('Too many partial messages in flight')
+      }
+      partial = { total, parts: [], bytes: 0 }
+      this.partials.set(id, partial)
+    }
+    if (partial.total !== total || partial.parts.length !== seq) {
+      throw new FrameError('Parts must arrive in order with a constant total')
+    }
+    const data = frame.data!
+    if (seq < total - 1 && data.length !== PART_BYTES) {
+      throw new FrameError('Every part but the last must be one full part')
+    }
+    partial.parts.push(data)
+    partial.bytes += data.length
+    if (partial.parts.length < total) {
+      return null
+    }
+    this.partials.delete(id)
+    if (partial.bytes > MAX_MESSAGE_BYTES) {
+      throw new FrameError('Reassembled message exceeds the size limit')
+    }
+    const whole = new Uint8Array(partial.bytes)
+    let offset = 0
+    for (const part of partial.parts) {
+      whole.set(part, offset)
+      offset += part.length
+    }
+    const inner = decodeFrame(whole, MAX_MESSAGE_BYTES)
+    if (inner.t === 'part') {
+      throw new FrameError('A part cannot carry another part')
+    }
+    return inner
+  }
 }

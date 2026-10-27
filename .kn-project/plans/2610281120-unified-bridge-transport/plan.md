@@ -31,7 +31,7 @@
 - **跨 repo 檔案指涉**: `aqutter-js` 的 `src/contract/bridge.ts` 與 `aqutter` 的 `shell/lib/src/bridge/bridge_names.dart` 成對（名稱不變）；訊框測試向量放在 `aqutter_core` 的 `test/` 並逐字複製到 `aqutter-js` 的 `test/`。
 
 ## Contract / 介面契約
-- **契約正本 repo**: `Aqutter/aqutter`　**修訂號**: `rev 1`　**狀態**: `凍結（核准日 2026-10-28）`
+- **契約正本 repo**: `Aqutter/aqutter`　**修訂號**: `rev 2`　**狀態**: `凍結（核准日 2026-10-28；rev 2 核准日 2026-10-28）`
 
 ### 1. 傳輸
 - 網頁與殼之間只有**一條**多工連線：`ws://127.0.0.1:<port>/channel/aqutter.rpc?token=<token>`。底層是 `aqutter_core` 既有的通用二進位通道（`AqutterNativeHost.registerChannel`），多工協定與分派由 `aqutter_core` 的新元件 `AqutterRpcHost` 提供（見 §5）；一次頁面載入一條，承載所有呼叫、回應、事件與二進位。
@@ -47,7 +47,7 @@ header = { "t": <type>, "id"?: <u53>, "name"?: <string>, "ch"?: <string>, "p"?: 
 ```
 | 欄位 | 型別 | 必填 | 說明 |
 |---|---|---|---|
-| `t` | string | 是 | `call`（網頁→Dart）、`res`、`err`（Dart→網頁，回應 `call`）、`evt`（Dart→網頁，事件） |
+| `t` | string | 是 | `call`（網頁→Dart）、`res`、`err`（Dart→網頁，回應 `call`）、`evt`（Dart→網頁，事件）、`part`（雙向，大訊框的一片，見下方「分段」） |
 | `id` | 整數 0..2^53-1 | `call`／`res`／`err` 必填 | 由**網頁**配發、連線內不重複；`res`／`err` 回填同一個值 |
 | `name` | string | `call` 必填 | handler 名稱：內建為既有名稱（`bridge_names.dart`／`bridge.ts` 的 handler 名），plugin 為 `<pluginId>.<method>` |
 | `ch` | string | `evt` 必填 | 事件頻道：內建為既有名稱，plugin 為 `<pluginId>.<event>` |
@@ -57,8 +57,13 @@ header = { "t": <type>, "id"?: <u53>, "name"?: <string>, "ch"?: <string>, "p"?: 
 
 - **二進位佔位**：`p` 內任何位置（陣列元素、物件的值）出現 `{"$bin": <i>}` 代表第 `i` 個 blob（0 起算，須 `0 ≤ i < blobs.length`，每個 blob 恰被引用一次）。物件鍵 `$bin` 為保留字，使用者資料**不得**使用。
 - **型別對應**：JS `ArrayBuffer`／任何 `ArrayBufferView` 送出，收到時一律是 `Uint8Array`；Dart `Uint8List`（含 `TypedData` 子型別）送出，收到時一律是 `Uint8List`。其他型別維持 JSON 語意（數字、字串、布林、null、陣列、物件）；`undefined` 與函式不可序列化。
-- **訊框上限**：整個訊框 ≤ 64 MiB（67,108,864 位元組）。超過：送出端（網頁）直接 reject `PAYLOAD_TOO_LARGE`；殼回應時超過則改回 `err`（`PAYLOAD_TOO_LARGE`）。
-- 訊框格式錯誤（長度不符、`blobs` 與佔位對不上、未知 `t`）：接收端**關閉連線**（close code 1002），不嘗試修復。
+- **單一 WebSocket 訊息上限**：≤ 64 MiB（67,108,864 位元組）。
+- **分段（自動，使用者不需處理）**：一個邏輯訊框（call／res／err／evt）編碼後 ≤ 64 MiB 時照舊整個送出；超過時，傳輸層把**編碼後的整段位元組**（含 4 位元組長度前綴）依序切成每片 16 MiB（16,777,216 位元組，最後一片較短）的 `part` 訊框送出：
+  `header = { "t": "part", "id": <分段訊息編號>, "seq": <0 起算>, "total": <片數 2..32>, "blobs": [<片長>] }`，後接該片位元組作為**唯一**的 blob。
+  - 接收端依 `id` 收齊 `seq` 0..`total`-1（必須依序到達）後串接成原訊框，再照常解碼。`id` 在同一方向的連線內不重複（各方向自己配發，與 `call` 的 `id` 是兩個獨立的編號空間）。
+  - 邏輯訊框總長 ≤ 512 MiB（536,870,912 位元組，即 `total` ≤ 32）。超過：送出端（網頁）直接 reject `PAYLOAD_TOO_LARGE`；殼回應超過則改回 `err`（`PAYLOAD_TOO_LARGE`）。
+  - 同一方向同時進行（尚未收齊）的分段訊息 ≤ 4 個。
+- 訊框格式錯誤（長度不符、`blobs` 與佔位對不上、未知 `t`，以及分段違規：片序不連續、`total` 超出 2..32、片長超過 16 MiB 或與 `blobs` 不符、同時進行的分段超過 4 個、分段內容本身又是 `part`、組回後長度超過 512 MiB）：接收端**關閉連線**（close code 1002），不嘗試修復。單一 WebSocket 訊息超過 64 MiB：關閉連線（1009）。
 
 ### 3. 呼叫與事件語意
 | 項目 | 規則 |
@@ -78,7 +83,7 @@ header = { "t": <type>, "id"?: <u53>, "name"?: <string>, "ch"?: <string>, "p"?: 
 | `HANDLER_NOT_FOUND` | `call.name` 沒有對應的 handler | reject，呼叫端視為程式錯誤 |
 | `HANDLER_FAILED` | handler 拋出例外；`message` 為例外訊息（不含堆疊） | reject |
 | `UNSUPPORTED_PLATFORM` | plugin 宣告了 `supportedPlatforms` 且目前平台不在內（行為與現況相同，改以 `err` 傳遞） | reject；呼叫前可用 `isPluginSupported` 判斷 |
-| `PAYLOAD_TOO_LARGE` | 訊框超過 64 MiB | reject |
+| `PAYLOAD_TOO_LARGE` | 邏輯訊框超過 512 MiB | reject |
 | `BAD_FRAME` | 訊框格式錯誤；伴隨連線關閉 | 連線重連，進行中的呼叫 `TRANSPORT_CLOSED` |
 | `TRANSPORT_UNAVAILABLE` | 排隊逾時、CSP 擋掉或平台無法建立連線（**僅網頁端產生**） | reject；提示 CSP 需放行 `ws://127.0.0.1:*` |
 | `TRANSPORT_CLOSED` | 已送出的呼叫在回應前連線關閉（**僅網頁端產生**） | reject；呼叫端自行決定是否重試 |
@@ -97,7 +102,7 @@ header = { "t": <type>, "id"?: <u53>, "name"?: <string>, "ch"?: <string>, "p"?: 
 - 開發階段，**不**保留舊傳輸（`callHandler` 呼叫 handler、`__flutterBridgeEmit`）的相容層；舊版網頁包搭配新版殼（或反之）不能運作，版本須成對（以 manifest 為準）。
 
 ### 7. 變更紀錄
-- _(尚無)_
+- 2026-10-28 rev 2：新增 `part` 訊框與自動分段，邏輯訊框上限由 64 MiB 提高到 512 MiB（單一 WebSocket 訊息仍 ≤ 64 MiB，≤ 64 MiB 的訊框行為不變）。原因：使用者要求框架自動處理大資料。影響：`aqutter_core`、`aqutter-js`（編解碼與重組）、`aqutter`（僅文件）。
 
 ## Impact Files
 - `src/index.ts:19,45,67-79`（`AqutterBridge`、`getFlutter`、`callFlutter`）、`:177-195`（`ensureEmitter`／`__flutterBridgeEmit`）、`:199-210`（`onFlutterEvent`）、`:288-300`（`callPluginRaw`）、`:312-322`（`onPluginEventRaw`）— 改用新傳輸；`callHandler` 只用於 `native_endpoint`。
@@ -143,7 +148,8 @@ header = { "t": <type>, "id"?: <u53>, "name"?: <string>, "ch"?: <string>, "p"?: 
 - **[Q2]** Linux 由 agent 以 WSL2 驗證；iOS、macOS 由使用者用 Mac 驗證；驗證失敗的處理屆時再決定，不預設也不排除全面統一。
 - **[Q3]** 重連期間的事件不補發，提供 `onTransportState`。
 - **[Q4]** 呼叫不設預設逾時。
-- **[Q5]** 訊框上限 64 MiB。
+- **[Q5]** 訊框上限 64 MiB（rev 1）。
+- **[契約變更]** rev 1 → 2：新增 `part` 訊框與自動分段，邏輯訊框上限 512 MiB（原因：使用者要求框架自動處理大資料，2026-10-28 核准）。
 - **[契約]** rev 1 凍結（2026-10-28）。
 - **[完成後]** commit + 開 PR（併回 `main`；使用者核准時未更動預設）。
 - **[執行模式]** 序列（依據：aqutter 依賴 core 的新 API，且環境不保證子 agent 能各自驗證；順序 aqutter_core → aqutter-js → aqutter）。

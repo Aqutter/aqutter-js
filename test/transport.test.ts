@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AqutterPluginError } from '../src/error'
-import { decodeFrame, encodeFrame } from '../src/frame'
+import { encodeMessages, Reassembler } from '../src/frame'
 import type { Frame } from '../src/frame'
 import { Transport } from '../src/transport'
 
@@ -11,6 +11,7 @@ class FakeSocket {
   readyState = 0
   binaryType = ''
   sent: Frame[] = []
+  private readonly reassembler = new Reassembler()
   closeArgs: [number?, string?] | null = null
   onopen: (() => void) | null = null
   onclose: ((event: { code: number }) => void) | null = null
@@ -20,7 +21,10 @@ class FakeSocket {
   }
 
   send(data: Uint8Array): void {
-    this.sent.push(decodeFrame(data))
+    const frame = this.reassembler.add(data)
+    if (frame) {
+      this.sent.push(frame)
+    }
   }
 
   close(code?: number, reason?: string): void {
@@ -38,9 +42,12 @@ class FakeSocket {
     this.onclose?.({ code })
   }
 
+  private partId = 0
+
   receive(frame: Frame): void {
-    const bytes = encodeFrame(frame)
-    this.onmessage?.({ data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) })
+    for (const bytes of encodeMessages(frame, this.partId++)) {
+      this.onmessage?.({ data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) })
+    }
   }
 }
 
@@ -217,8 +224,24 @@ describe('Transport', () => {
     expect(lastSocket().closeArgs?.[0]).toBe(1002)
   })
 
-  it('rejects an oversized payload immediately with PAYLOAD_TOO_LARGE', async () => {
+  it('splits a 70 MiB call into parts and reassembles a 70 MiB answer', async () => {
     const transport = make()
-    await expect(transport.call('a.big', { data: new Uint8Array(64 * 1024 * 1024) })).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE' })
+    const data = new Uint8Array(70 * 1024 * 1024).fill(3)
+    data[12345] = 42
+    const call = transport.call('a.big', { data })
+    await vi.advanceTimersByTimeAsync(0)
+    lastSocket().open()
+    const sent = lastSocket().sent[0]!
+    expect((sent.p as { data: Uint8Array }).data.length).toBe(data.length)
+    expect((sent.p as { data: Uint8Array }).data[12345]).toBe(42)
+    lastSocket().receive({ t: 'res', id: sent.id!, p: { data } })
+    const result = await call as { data: Uint8Array }
+    expect(result.data.length).toBe(data.length)
+    expect(result.data[12345]).toBe(42)
+  })
+
+  it('rejects a payload over 512 MiB immediately with PAYLOAD_TOO_LARGE', async () => {
+    const transport = make()
+    await expect(transport.call('a.big', { data: new Uint8Array(512 * 1024 * 1024) })).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE' })
   })
 })

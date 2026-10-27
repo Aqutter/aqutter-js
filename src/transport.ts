@@ -1,6 +1,7 @@
 import type { NativeEndpoint } from './contract/bridge'
 import { AqutterPluginError } from './error'
-import { decodeFrame, encodeFrame, FrameError } from './frame'
+import type { Frame } from './frame'
+import { encodeMessages, FrameError, Reassembler } from './frame'
 
 /** 與殼之間那一條多工連線的狀態。 */
 export type TransportState = 'connecting' | 'open' | 'closed'
@@ -23,7 +24,7 @@ interface Pending {
 
 interface Queued extends Pending {
   id: number
-  bytes: Uint8Array
+  messages: Uint8Array[]
   timer: ReturnType<typeof setTimeout>
 }
 
@@ -47,6 +48,7 @@ export class Transport {
   private current: TransportState = 'closed'
   private started = false
   private nextId = 0
+  private nextPartId = 0
   private retryDelay: number
   private lastFailure = ''
 
@@ -92,9 +94,9 @@ export class Transport {
   call(name: string, payload: unknown): Promise<unknown> {
     this.start()
     const id = this.nextId++
-    let bytes: Uint8Array
+    let messages: Uint8Array[]
     try {
-      bytes = encodeFrame({ t: 'call', id, name, p: payload })
+      messages = encodeMessages({ t: 'call', id, name, p: payload }, this.nextPartId++)
     }
     catch (error) {
       if (error instanceof FrameError) {
@@ -105,7 +107,9 @@ export class Transport {
     return new Promise<unknown>((resolve, reject) => {
       if (this.current === 'open' && this.socket) {
         this.pending.set(id, { resolve, reject })
-        this.socket.send(bytes)
+        for (const message of messages) {
+          this.socket.send(message)
+        }
         return
       }
       const timer = setTimeout(() => {
@@ -113,7 +117,7 @@ export class Transport {
         const reason = this.lastFailure ? `${this.lastFailure}; ` : ''
         reject(new AqutterPluginError('TRANSPORT_UNAVAILABLE', `Could not reach the host within ${this.queueTimeoutMs} ms (${reason}${CSP_HINT})`))
       }, this.queueTimeoutMs)
-      this.queue.push({ id, bytes, resolve, reject, timer })
+      this.queue.push({ id, messages, resolve, reject, timer })
     })
   }
 
@@ -152,6 +156,7 @@ export class Transport {
     socket.binaryType = 'arraybuffer'
     this.socket = socket
     let opened = false
+    const reassembler = new Reassembler()
 
     socket.onopen = () => {
       opened = true
@@ -163,7 +168,9 @@ export class Transport {
       for (const item of queued) {
         clearTimeout(item.timer)
         this.pending.set(item.id, { resolve: item.resolve, reject: item.reject })
-        socket.send(item.bytes)
+        for (const message of item.messages) {
+          socket.send(message)
+        }
       }
     }
     socket.onmessage = (event: MessageEvent) => {
@@ -171,7 +178,10 @@ export class Transport {
         return
       }
       try {
-        this.handle(decodeFrame(event.data))
+        const frame = reassembler.add(event.data)
+        if (frame) {
+          this.handle(frame)
+        }
       }
       catch (error) {
         if (error instanceof FrameError) {
@@ -194,7 +204,7 @@ export class Transport {
     }
   }
 
-  private handle(frame: ReturnType<typeof decodeFrame>): void {
+  private handle(frame: Frame): void {
     if (frame.t === 'evt') {
       const set = this.eventListeners.get(frame.ch ?? '')
       for (const listener of set ? [...set] : []) {
