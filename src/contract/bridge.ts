@@ -23,9 +23,7 @@ export enum BridgeHandler {
   NativeEndpoint = 'native_endpoint',
 
   /** 執行單句 SQL（含 bind 參數）。 */
-  DbExec = 'db_exec',
   /** 開啟資料庫；以名稱（app 目錄）或絕對路徑（NC 模式）。 */
-  DbOpen = 'db_open',
 
   /** 讀取 KV 值。 */
   StoreGet = 'store_get',
@@ -336,34 +334,6 @@ export interface HardwareKeyPayload {
   key: AppKey
   /** 原始的平台鍵碼，僅供除錯。 */
   nativeKeyCode?: number
-}
-
-/** DB handler 執行單句 SQL 的請求。 */
-export interface DbExecRequest {
-  /** 目標資料庫識別名（對應已開啟連線）。 */
-  name: string
-  /** 已由 Kysely 編譯的 SQL 字串。 */
-  sql: string
-  /** 綁定參數；BLOB 以 base64 字串傳遞。 */
-  bind: unknown[]
-}
-
-/** DB handler 執行結果；查詢回 rows，異動回影響數與 insertId。 */
-export interface DbExecResponse {
-  /** 查詢結果列；非查詢語句為空陣列。 */
-  rows?: Record<string, unknown>[]
-  /** 受影響列數（異動語句）。 */
-  changes?: number
-  /** 最後插入的 rowid（INSERT 語句）。 */
-  insertId?: number
-}
-
-/** 開啟資料庫請求；name 與 path 至少提供其一（path 優先，對應 NC 模式）。 */
-export interface DbOpenRequest {
-  /** 資料庫名稱，實際檔案為 app 目錄下的 `${name}.db`。 */
-  name?: string
-  /** 資料庫絕對路徑；提供時優先於 name。 */
-  path?: string
 }
 
 /** 下載請求。 */
