@@ -8,6 +8,7 @@ Aqutter 殼的網頁端 client：npm 套件 `@aqutter/aqutter`，框架中立（
 - **跨語言名稱成對（跨 repo）**：handler／事件名稱在 `src/contract/bridge.ts`，對應 `Aqutter/aqutter` 的 `shell/lib/src/bridge/bridge_names.dart`；plugin 命名規則在 `src/index.ts`，對應 `shell/lib/src/plugin/aqutter_plugin.dart`；只改一邊就是錯。
 - **鏡像協定兩端成對**：`src/nativeview/{frame,gestures}.ts` 對應 `Aqutter/aqutter_core` 的 `native_frame.dart`。
 - **版本對應以 manifest 為準**：改動後要更新 `Aqutter/aqutter` 的 `manifest/releases.json` 的 `client.spec`（commit sha）。
+- **二進位通道成對**：`src/channel.ts` 的路徑 `/channel/<pluginId>.<channel>?token=` 與名稱格式對應 `Aqutter/aqutter_core` 的 `native_channel.dart`，plugin 端對應 `Aqutter/aqutter` 的 `AqutterPlugin.channels`。
 - **套件名不改**：`@aqutter/aqutter`。
 - **`aqutterError` 是保留欄位**：殼對 plugin 呼叫失敗（例如不支援本平台）回傳 `{ aqutterError: { code, message } }`，`callPlugin` 轉成 `AqutterPluginError`；plugin 自己的回傳不得使用這個欄位名。
 - **安裝**：`github:Aqutter/aqutter-js#<ref>`（repo 根目錄；npm、pnpm、yarn 皆可，bun 尚未驗證）。開發階段版本 tag `0.0.0` 隨 `main` 前進。
