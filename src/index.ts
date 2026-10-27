@@ -1,13 +1,18 @@
 import { BridgeHandler } from './contract/bridge'
 import type { BridgeEvent } from './contract/bridge'
 import type { BridgeContract, BridgeEventContract, PayloadArgs } from './contract/table'
+import { AqutterPluginError } from './error'
+import { Transport } from './transport'
+import type { TransportState } from './transport'
+
+export { AqutterPluginError } from './error'
+export type { TransportState } from './transport'
 
 /**
  * Flutter 橋接底層：runtime 偵測、JS→原生 handler 呼叫、原生→JS 事件頻道。
  *
- * 取代 Tauri 版的 `@tauri-apps/api` invoke/event。原生端為 aqutter_core
- * 的 `AqutterWebViewController`，以 `addJavaScriptHandler` 對接 `callFlutter`，
- * 並以 `evaluateJavascript` 呼叫 `window.__flutterBridgeEmit` 派送事件。
+ * 呼叫與事件都走**同一條**多工的本機連線（見 {@link Transport}，原生端是 aqutter_core 的 `AqutterRpcHost`），
+ * 酬載可直接帶 `ArrayBuffer`／`Uint8Array`。`callHandler` 只用來取得連線資訊（`native_endpoint`）。
  *
  * 兩個入口的型別皆由 `./contract/table` 的契約表決定，呼叫端與監聽端
  * **不需要**也**不應該**再標註泛型或斷言 payload。
@@ -19,22 +24,8 @@ interface AqutterBridge {
   callHandler: (handlerName: string, ...args: unknown[]) => Promise<unknown>
 }
 
-/**
- * 內部用的監聽器型別。
- *
- * 對外的 {@link onFlutterEvent} 以契約決定 payload 型別；此處存進 Map 時已無法保留
- * 個別頻道的型別關聯，故以 `never` 收斂（逆變位置上可接受任何具體 payload 型別）。
- */
-type StoredListener = (payload: never) => void
-
 /** 取消事件監聽。 */
 type Unsubscribe = () => void
-
-/** channel → 監聽器集合。 */
-const listeners = new Map<string, Set<StoredListener>>()
-
-/** 全域事件派送函式的掛載旗標，避免重複註冊。 */
-let emitterAttached = false
 
 /**
  * 是否為沒有 `window` 的伺服端環境（SSR / 預渲染）。
@@ -55,6 +46,40 @@ const getFlutter = (): AqutterBridge | undefined => {
  */
 export const isFlutter = (): boolean => getFlutter() !== undefined
 
+let transport: Transport | undefined
+
+/** 與殼之間的傳輸；第一次使用時建立並開始連線。非 Flutter 環境回傳 undefined。 */
+const getTransport = (): Transport | undefined => {
+  const flutter = getFlutter()
+  if (!flutter) {
+    return undefined
+  }
+  transport ??= new Transport({
+    resolveEndpoint: async () => await flutter.callHandler(BridgeHandler.NativeEndpoint, {}) as { port: number, token: string },
+  })
+  return transport
+}
+
+/** 目前的傳輸狀態；非 Flutter 環境永遠是 `closed`。第一次呼叫會開始連線。 */
+export const getTransportState = (): TransportState => {
+  const current = getTransport()
+  current?.start()
+  return current?.state ?? 'closed'
+}
+
+/**
+ * 訂閱傳輸狀態變化（`connecting`／`open`／`closed`）。事件不會在重連後補發，
+ * 需要重新取得狀態的 App 在這裡收到 `open` 時自行重新查詢。
+ */
+export const onTransportState = (listener: (state: TransportState) => void): Unsubscribe => {
+  const current = getTransport()
+  if (!current) {
+    return () => {}
+  }
+  current.start()
+  return current.onState(listener)
+}
+
 /**
  * 呼叫原生 handler。非 Flutter 環境直接拋錯，避免 silent failure。
  *
@@ -72,7 +97,10 @@ export const callFlutter = async <H extends BridgeHandler>(
   if (!flutter) {
     throw new Error(`[flutterBridge] callFlutter(${handler}) is only available inside Flutter`)
   }
-  const result = await flutter.callHandler(handler, payload ?? {})
+  // 唯一留在 callHandler 的呼叫：取得連線資訊（傳輸本身要靠它才連得上）
+  const result = handler === BridgeHandler.NativeEndpoint
+    ? await flutter.callHandler(handler, payload ?? {})
+    : await getTransport()!.call(handler, payload ?? {})
   // 跨語言邊界：型別系統對 Dart 送回什麼一無所知，這是刻意保留的唯一一處斷言。
   // 需要執行期保證的呼叫端請自行驗證（作法是使用端對 `AppKey` 逐一檢查值）。
   return result as BridgeContract[H]['res']
@@ -157,36 +185,6 @@ export const isBridgeSupported = (handler: BridgeHandler): boolean => {
 }
 
 /**
- * 派送事件給該 channel 的所有監聽器；供全域派送函式與內部使用。
- *
- * 刻意回傳 `void` 並丟棄監聽器的回傳值——這條通道是**單向**的，Dart 端的
- * `bridge_emitter.dart` 同樣不讀取 `evaluateJavascript` 的結果。原生層無法向網頁層
- * 索取資料；需要那種互動時得另建請求通道，不要試圖從這裡回傳。
- */
-const dispatch = (channel: string, payload: unknown): void => {
-  const set = listeners.get(channel)
-  if (!set) {
-    return
-  }
-  for (const listener of set) {
-    (listener as (value: unknown) => void)(payload)
-  }
-}
-
-/**
- * 掛載全域派送函式 `window.__flutterBridgeEmit`，供原生端以 evaluateJavascript 呼叫。
- * 冪等：僅在客戶端且尚未掛載時執行一次。
- */
-const ensureEmitter = (): void => {
-  if (emitterAttached || isServer()) {
-    return
-  }
-  ;(window as unknown as { __flutterBridgeEmit?: (channel: string, payload: unknown) => void })
-    .__flutterBridgeEmit = dispatch
-  emitterAttached = true
-}
-
-/**
  * 訂閱原生→JS 事件。回傳取消訂閱函式。
  *
  * payload 型別由 {@link BridgeEventContract} 決定——**不要**再 `payload as X`。
@@ -200,14 +198,11 @@ export const onFlutterEvent = <C extends BridgeEvent>(
   channel: C,
   listener: (payload: BridgeEventContract[C]) => void,
 ): Unsubscribe => {
-  ensureEmitter()
-  const set = listeners.get(channel) ?? new Set<StoredListener>()
-  const stored = listener as StoredListener
-  set.add(stored)
-  listeners.set(channel, set)
-  return () => {
-    set.delete(stored)
+  const current = getTransport()
+  if (!current) {
+    return () => {}
   }
+  return current.onEvent(channel, listener as (payload: unknown) => void)
 }
 
 /* ------------------------------------------------------------------ *
@@ -253,34 +248,6 @@ export const pluginHandlerName = (pluginId: string, method: string): string => `
 export const pluginEventChannel = (pluginId: string, event: string): string => `${pluginId}.${event}`
 
 /**
- * 殼對 plugin 呼叫失敗時回傳的保留格式：`{ aqutterError: { code, message } }`（例如 plugin 不支援本平台時的
- * `UNSUPPORTED_PLATFORM`）。用資料而不是例外回報，因為例外怎麼傳回網頁取決於各原生平台的實作，
- * 殼端無法對每個平台保證 Promise 會 reject。`aqutterError` 是保留欄位，plugin 自己的回傳不得使用。
- */
-export class AqutterPluginError extends Error {
-  readonly code: string
-
-  constructor(code: string, message: string) {
-    super(`${code}: ${message}`)
-    this.name = 'AqutterPluginError'
-    this.code = code
-  }
-}
-
-/** 結果若是殼的保留格式錯誤資料就轉成 {@link AqutterPluginError}；格式不符（欄位型別不對）一律當一般結果。 */
-const pluginErrorOf = (result: unknown): AqutterPluginError | null => {
-  if (typeof result !== 'object' || result === null || !('aqutterError' in result)) {
-    return null
-  }
-  const error = (result as { aqutterError: unknown }).aqutterError
-  if (typeof error !== 'object' || error === null) {
-    return null
-  }
-  const { code, message } = error as { code?: unknown, message?: unknown }
-  return typeof code === 'string' && typeof message === 'string' ? new AqutterPluginError(code, message) : null
-}
-
-/**
  * 呼叫 plugin 方法（未型別化）。plugin 沒有發佈契約，或在 Flutter 之外時使用；
  * 非 Flutter 環境直接拋錯，與 {@link callFlutter} 一致。
  * 殼回傳 `aqutterError`（見 {@link AqutterPluginError}）時拋出該錯誤，其餘結果原樣回傳。
@@ -291,12 +258,7 @@ export const callPluginRaw = async (pluginId: string, method: string, payload?: 
   if (!flutter) {
     throw new Error(`[flutterBridge] callPlugin(${name}) is only available inside Flutter`)
   }
-  const result = await flutter.callHandler(name, payload ?? {})
-  const error = pluginErrorOf(result)
-  if (error) {
-    throw error
-  }
-  return result
+  return await getTransport()!.call(name, payload ?? {})
 }
 
 /** 呼叫 plugin 方法；型別由 {@link AqutterPluginRegistry} 決定。 */
@@ -310,15 +272,11 @@ export const callPlugin = async <Id extends RegistryId, M extends keyof MethodsO
 
 /** 訂閱 plugin 事件（未型別化）。回傳取消訂閱函式。 */
 export const onPluginEventRaw = (pluginId: string, event: string, listener: (payload: unknown) => void): Unsubscribe => {
-  ensureEmitter()
-  const channel = pluginEventChannel(pluginId, event)
-  const set = listeners.get(channel) ?? new Set<StoredListener>()
-  const stored = listener as StoredListener
-  set.add(stored)
-  listeners.set(channel, set)
-  return () => {
-    set.delete(stored)
+  const current = getTransport()
+  if (!current) {
+    return () => {}
   }
+  return current.onEvent(pluginEventChannel(pluginId, event), listener)
 }
 
 /** 訂閱 plugin 事件；payload 型別由 {@link AqutterPluginRegistry} 決定。 */
@@ -341,5 +299,4 @@ export const isPluginSupported = (pluginId: string, method: string): boolean => 
   return capabilities === null || capabilities.has(pluginHandlerName(pluginId, method))
 }
 
-export * from './channel'
 export * from './nativeview'

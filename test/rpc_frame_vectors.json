@@ -1,0 +1,86 @@
+{
+  "valid": [
+    {
+      "name": "call without payload",
+      "hex": "000000357b2274223a2263616c6c222c226964223a312c226e616d65223a22706c6174666f726d5f696e666f222c22626c6f6273223a5b5d7d",
+      "t": "call",
+      "id": 1,
+      "nameField": "platform_info",
+      "ch": null
+    },
+    {
+      "name": "call with json payload",
+      "hex": "000000627b2274223a2263616c6c222c226964223a372c226e616d65223a22686170746963732e696d70616374222c2270223a7b227374796c65223a226c69676874222c226e223a5b312c322e352c6e756c6c2c747275655d7d2c22626c6f6273223a5b5d7d",
+      "t": "call",
+      "id": 7,
+      "nameField": "haptics.impact",
+      "ch": null
+    },
+    {
+      "name": "res with a nested binary",
+      "hex": "0000004e7b2274223a22726573222c226964223a393030373139393235343734303939312c2270223a7b2261223a5b312c325d2c2262696e223a7b222462696e223a307d7d2c22626c6f6273223a5b335d7d010203",
+      "t": "res",
+      "id": 9007199254740991,
+      "nameField": null,
+      "ch": null
+    },
+    {
+      "name": "evt with two binaries",
+      "hex": "0000004c7b2274223a22657674222c226368223a2263616d2e6672616d65222c2270223a5b7b222462696e223a307d2c7b2278223a7b222462696e223a317d7d5d2c22626c6f6273223a5b312c305d7dff",
+      "t": "evt",
+      "id": null,
+      "nameField": null,
+      "ch": "cam.frame"
+    },
+    {
+      "name": "err",
+      "hex": "0000004c7b2274223a22657272222c226964223a332c2265223a7b22636f6465223a2248414e444c45525f4641494c4544222c226d657373616765223a22626f6f6d227d2c22626c6f6273223a5b5d7d",
+      "t": "err",
+      "id": 3,
+      "nameField": null,
+      "ch": null
+    },
+    {
+      "name": "non-ascii text",
+      "hex": "000000367b2274223a22726573222c226964223a342c2270223a7b226d7367223a22e4bda0e5a5bd20e29c93227d2c22626c6f6273223a5b5d7d",
+      "t": "res",
+      "id": 4,
+      "nameField": null,
+      "ch": null
+    }
+  ],
+  "invalid": [
+    {
+      "name": "shorter than the length prefix",
+      "hex": "000000"
+    },
+    {
+      "name": "header length beyond the frame",
+      "hex": "0000ffff7b7d"
+    },
+    {
+      "name": "header is not JSON",
+      "hex": "00000003616263"
+    },
+    {
+      "name": "unknown type",
+      "hex": "0000001d7b2274223a227a7a7a222c226964223a312c22626c6f6273223a5b5d7d"
+    },
+    {
+      "name": "blobs do not add up",
+      "hex": "0000001e7b2274223a22726573222c226964223a312c22626c6f6273223a5b355d7d"
+    },
+    {
+      "name": "a call without a name",
+      "hex": "0000001e7b2274223a2263616c6c222c226964223a312c22626c6f6273223a5b5d7d"
+    },
+    {
+      "name": "a blob that is never referenced",
+      "hex": "0000001e7b2274223a22726573222c226964223a312c22626c6f6273223a5b315d7d00"
+    },
+    {
+      "name": "a placeholder beyond the blobs",
+      "hex": "0000002c7b2274223a22726573222c226964223a312c2270223a7b222462696e223a307d2c22626c6f6273223a5b5d7d"
+    }
+  ]
+}
