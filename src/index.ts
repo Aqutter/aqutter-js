@@ -1,6 +1,7 @@
 import { BridgeHandler } from './contract/bridge'
 import type { BridgeEvent } from './contract/bridge'
 import type { BridgeContract, BridgeEventContract, PayloadArgs } from './contract/table'
+import { getEndpoint, hasEndpoint } from './endpoint'
 import { AqutterPluginError } from './error'
 import { Transport } from './transport'
 import type { TransportState } from './transport'
@@ -12,17 +13,11 @@ export type { TransportState } from './transport'
  * Flutter 橋接底層：runtime 偵測、JS→原生 handler 呼叫、原生→JS 事件頻道。
  *
  * 呼叫與事件都走**同一條**多工的本機連線（見 {@link Transport}，原生端是 aqutter_core 的 `AqutterRpcHost`），
- * 酬載可直接帶 `ArrayBuffer`／`Uint8Array`。`callHandler` 只用來取得連線資訊（`native_endpoint`）。
+ * 酬載可直接帶 `ArrayBuffer`／`Uint8Array`。連線資訊（埠與令牌）由殼注入的 `window.aqutterEndpoint` 提供（見 `endpoint.ts`）。
  *
  * 兩個入口的型別皆由 `./contract/table` 的契約表決定，呼叫端與監聽端
  * **不需要**也**不應該**再標註泛型或斷言 payload。
  */
-
-/** aqutter_core 注入於 `window.aqutter` 的橋接介面（僅在 Flutter WebView 內存在）。 */
-interface AqutterBridge {
-  /** 呼叫原生註冊的 handler，回傳其結果的 Promise。 */
-  callHandler: (handlerName: string, ...args: unknown[]) => Promise<unknown>
-}
 
 /** 取消事件監聽。 */
 type Unsubscribe = () => void
@@ -33,30 +28,20 @@ type Unsubscribe = () => void
  */
 const isServer = (): boolean => typeof window === 'undefined'
 
-const getFlutter = (): AqutterBridge | undefined => {
-  if (isServer()) {
-    return undefined
-  }
-  return (window as unknown as { aqutter?: AqutterBridge }).aqutter
-}
-
 /**
- * 是否運行於 Flutter（aqutter_core）殼內。
+ * 是否運行於 Flutter（aqutter_core）殼內：殼有沒有注入 `window.aqutterEndpoint`。
  * 為純瀏覽器 / SSR 以外唯一的原生判斷依據。
  */
-export const isFlutter = (): boolean => getFlutter() !== undefined
+export const isFlutter = (): boolean => !isServer() && hasEndpoint()
 
 let transport: Transport | undefined
 
 /** 與殼之間的傳輸；第一次使用時建立並開始連線。非 Flutter 環境回傳 undefined。 */
 const getTransport = (): Transport | undefined => {
-  const flutter = getFlutter()
-  if (!flutter) {
+  if (!isFlutter()) {
     return undefined
   }
-  transport ??= new Transport({
-    resolveEndpoint: async () => await flutter.callHandler(BridgeHandler.NativeEndpoint, {}) as { port: number, token: string },
-  })
+  transport ??= new Transport({ resolveEndpoint: getEndpoint })
   return transport
 }
 
@@ -93,14 +78,10 @@ export const callFlutter = async <H extends BridgeHandler>(
   handler: H,
   ...[payload]: PayloadArgs<H>
 ): Promise<BridgeContract[H]['res']> => {
-  const flutter = getFlutter()
-  if (!flutter) {
+  if (!isFlutter()) {
     throw new Error(`[flutterBridge] callFlutter(${handler}) is only available inside Flutter`)
   }
-  // 唯一留在 callHandler 的呼叫：取得連線資訊（傳輸本身要靠它才連得上）
-  const result = handler === BridgeHandler.NativeEndpoint
-    ? await flutter.callHandler(handler, payload ?? {})
-    : await getTransport()!.call(handler, payload ?? {})
+  const result = await getTransport()!.call(handler, payload ?? {})
   // 跨語言邊界：型別系統對 Dart 送回什麼一無所知，這是刻意保留的唯一一處斷言。
   // 需要執行期保證的呼叫端請自行驗證（作法是使用端對 `AppKey` 逐一檢查值）。
   return result as BridgeContract[H]['res']
@@ -253,9 +234,8 @@ export const pluginEventChannel = (pluginId: string, event: string): string => `
  * 殼回傳 `aqutterError`（見 {@link AqutterPluginError}）時拋出該錯誤，其餘結果原樣回傳。
  */
 export const callPluginRaw = async (pluginId: string, method: string, payload?: unknown): Promise<unknown> => {
-  const flutter = getFlutter()
   const name = pluginHandlerName(pluginId, method)
-  if (!flutter) {
+  if (!isFlutter()) {
     throw new Error(`[flutterBridge] callPlugin(${name}) is only available inside Flutter`)
   }
   return await getTransport()!.call(name, payload ?? {})

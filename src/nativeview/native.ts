@@ -1,9 +1,10 @@
 import { AqutterNativeFormat, decodeAqutterNativeFrame, peekAqutterNativeSeq } from './frame'
+import { getEndpoint } from '../endpoint'
 import type { AqutterNativeFrame } from './frame'
 import type { AqutterNativeGesture } from './gestures'
 import type { AqutterNativePointer } from './pointer'
 
-/** 原生端的連線資訊（來自 bridge handler `native_endpoint`）。 */
+/** 原生端的連線資訊（殼注入的 `window.aqutterEndpoint`）。 */
 export interface AqutterNativeEndpoint {
   port: number
   token: string
@@ -33,8 +34,8 @@ export interface AqutterNativeOptions {
   /** 與原生端 `AqutterNative.sessionId` 一致。 */
   session: string
   canvas: HTMLCanvasElement
-  /** 取得連線資訊；通常是 `() => callFlutter(BridgeHandler.NativeEndpoint)`。 */
-  resolveEndpoint: () => Promise<AqutterNativeEndpoint>
+  /** 取得連線資訊；省略時讀殼注入的 `window.aqutterEndpoint`（每次連線前重新讀取）。 */
+  resolveEndpoint?: () => Promise<AqutterNativeEndpoint>
   /** 斷線後重連的間隔（毫秒）。 */
   reconnectMs?: number
   /** 連線狀態改變時呼叫。 */
@@ -223,7 +224,7 @@ export class AqutterNative {
   private async connect(): Promise<void> {
     let endpoint: AqutterNativeEndpoint
     try {
-      endpoint = await this.options.resolveEndpoint()
+      endpoint = await (this.options.resolveEndpoint ?? getEndpoint)()
     }
     catch {
       this.scheduleReconnect()

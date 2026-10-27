@@ -1,4 +1,4 @@
-import type { NativeEndpoint } from './contract/bridge'
+import type { Endpoint } from './endpoint'
 import { AqutterPluginError } from './error'
 import type { Frame } from './frame'
 import { encodeMessages, FrameError, Reassembler } from './frame'
@@ -8,7 +8,7 @@ export type TransportState = 'connecting' | 'open' | 'closed'
 
 export interface TransportOptions {
   /** 取得連線資訊（埠與令牌）；殼重啟後會變，所以每次連線都重新取得。 */
-  resolveEndpoint: () => Promise<NativeEndpoint>
+  resolveEndpoint: () => Promise<Endpoint>
   /** WebSocket 建構函式；預設全域的 `WebSocket`。測試用。 */
   webSocket?: typeof WebSocket
   /** 連線建立前排隊的上限（毫秒）；預設 10 秒。 */
@@ -139,7 +139,7 @@ export class Transport {
       url = `ws://127.0.0.1:${endpoint.port}/channel/${CHANNEL}?token=${encodeURIComponent(endpoint.token)}`
     }
     catch (error) {
-      this.lastFailure = `native_endpoint failed: ${error instanceof Error ? error.message : String(error)}`
+      this.lastFailure = `endpoint unavailable: ${error instanceof Error ? error.message : String(error)}`
       this.scheduleReconnect()
       return
     }

@@ -1,5 +1,3 @@
-import { BridgeHandler } from '../contract/bridge'
-import { callFlutter } from '../index'
 import { DEFAULT_GESTURE_OPTIONS, GestureRecognizer, IOS_GESTURE_OPTIONS, isIosTouch } from './gestures'
 import type { DoubleTapMode, GestureOptions } from './gestures'
 import { toPointerMessage } from './pointer'
@@ -143,7 +141,6 @@ const createElementClass = (): CustomElementConstructor => {
       this.mirror = new AqutterNative({
         session,
         canvas: this.canvas,
-        resolveEndpoint: () => callFlutter(BridgeHandler.NativeEndpoint),
       measure: () => ({ width: this.clientWidth, height: this.clientHeight, devicePixelRatio: window.devicePixelRatio || 1 }),
         onStatus: connected => this.dispatchEvent(new CustomEvent('aqutter-status', { detail: { connected } })),
         maxInFlight: this.readMaxInFlight(),

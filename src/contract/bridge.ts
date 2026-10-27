@@ -13,14 +13,12 @@ import type { AppKey } from './models/key'
 import type { PermissionStatus, PermissionType } from './models/permission'
 import type { FilePickerMode, FilePickerOptions } from './models/filePicker'
 
-/** JS→原生：handler 名稱（經多工連線送出；只有 `native_endpoint` 走 `window.aqutter.callHandler`）。 */
+/** JS→原生：handler 名稱（全部經多工連線送出）。 */
 export enum BridgeHandler {
   /** 啟動時取得平台資訊（OS / 版本 / 是否行動端）。 */
   PlatformInfo = 'platform_info',
   /** 網頁層已掛載且首次繪製完成；原生層據此移除啟動過場。 */
   AppReady = 'app_ready',
-  /** native view 鏡像的 WebSocket 連線資訊（埠與令牌）。 */
-  NativeEndpoint = 'native_endpoint',
 
   /** 執行單句 SQL（含 bind 參數）。 */
   /** 開啟資料庫；以名稱（app 目錄）或絕對路徑（NC 模式）。 */
@@ -167,13 +165,6 @@ export enum BridgeEvent {
  * （見 `bridge_registry.dart` 的 `_handle` 註解）。因此**不要**把它當成「成功」的證據：
  * 「這個平台做不做得到」請改查 {@link isBridgeSupported}。
  */
-/** native view 鏡像連線資訊。 */
-export interface NativeEndpoint {
-  port: number
-  /** 本次啟動的隨機令牌；連線時以 query `token` 帶上。 */
-  token: string
-}
-
 export interface OkResponse {
   ok: true
 }

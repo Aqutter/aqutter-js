@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wiki</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1f2328; --muted:#6b7280; --border:#e5e7eb;
+    --sidebar:#f6f8fa; --accent:#2563eb; --accent-soft:#dbeafe;
+    --code-bg:#f3f4f6; --hover:#eef2f7; --table-head:#f6f8fa; --mark:#fde68a;
+    --callout:#f6f8fa; --note:#2563eb; --important:#7c3aed; --warning:#d97706; --ok:#16a34a; --err:#cf222e;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --border:#30363d;
+    --sidebar:#161b22; --accent:#4493f8; --accent-soft:#132a4a;
+    --code-bg:#161b22; --hover:#1c2330; --table-head:#161b22; --mark:#7c5a00;
+    --callout:#161b22; --note:#4493f8; --important:#a371f7; --warning:#e3a008; --ok:#3fb950; --err:#f85149;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --border:#30363d;
+      --sidebar:#161b22; --accent:#4493f8; --accent-soft:#132a4a;
+      --code-bg:#161b22; --hover:#1c2330; --table-head:#161b22; --mark:#7c5a00;
+      --callout:#161b22; --note:#4493f8; --important:#a371f7; --warning:#e3a008; --ok:#3fb950; --err:#f85149;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--fg);font-size:15px;line-height:1.65}
+  #app{display:flex;height:100vh;overflow:hidden}
+  button{font:inherit}
+  .btn{background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:12.5px;cursor:pointer}
+  .btn:hover{background:var(--hover);color:var(--fg)}
+  .btn:disabled{opacity:.4;cursor:default}
+  /* Sidebar */
+  #sidebar{width:280px;min-width:200px;max-width:46vw;background:var(--sidebar);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;overflow:hidden}
+  #sidebar header{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+  #sidebar header .name{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #search{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px}
+  #search:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  #tree,#results{overflow:auto;padding:8px;flex:1}
+  #content pre.code{position:relative}
+  #content pre.code .copy{position:absolute;top:6px;right:6px;font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--muted);cursor:pointer;opacity:0;transition:opacity .15s}
+  #content pre.code:hover .copy,#content pre.code .copy:focus{opacity:1}
+  #content pre.code .copy.done{color:var(--accent);border-color:var(--accent)}
+  #content .tblwrap{overflow:auto;margin:.6em 0}
+  #content .tblbar{display:flex;gap:8px;align-items:center;margin:.6em 0 .2em}
+  #content .tblbar input{font-size:12.5px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:inherit;min-width:180px}
+  #content .tblbar small{color:var(--muted)}
+  #content th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+  #content th.sortable::after{content:" ↕";opacity:.35;font-size:.85em}
+  #content th.sortable.asc::after{content:" ↑";opacity:1}
+  #content th.sortable.desc::after{content:" ↓";opacity:1}
+  #content a.src::after{content:" ↗";font-size:.8em;opacity:.6}
+  #tree .sec{display:block;padding:8px 8px 2px;font-size:11px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;font-weight:700}
+  #results{display:none}
+  #tree ul{list-style:none;margin:0;padding-left:14px}
+  #tree>ul{padding-left:4px}
+  #tree li{margin:1px 0}
+  #tree .f,#tree .d{display:block;padding:3px 8px;border-radius:6px;cursor:pointer;font-size:13.5px;
+    text-decoration:none;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #tree .f:hover,#tree .d:hover{background:var(--hover)}
+  #tree .f.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  #tree .d{color:var(--muted);font-weight:600;font-size:12.5px;user-select:none}
+  #tree .d::before{content:"▾ ";font-size:10px}
+  #tree li.closed>.d::before{content:"▸ "}
+  #tree li.closed>ul{display:none}
+  .res{display:block;padding:6px 8px;border-radius:6px;text-decoration:none;color:var(--fg);margin-bottom:2px}
+  .res:hover,.res.sel{background:var(--hover)}
+  .res b{display:block;font-size:13.5px}
+  .res small{color:var(--muted);font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .res mark{background:var(--mark);color:inherit;border-radius:2px}
+  #resizer{width:5px;cursor:col-resize;background:transparent}
+  #resizer:hover{background:var(--accent-soft)}
+  /* Main */
+  #main{flex:1;overflow:auto;position:relative}
+  #toolbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);
+    padding:8px 20px;display:flex;align-items:center;gap:8px;font-size:13px;z-index:5}
+  #crumb{color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #crumb a{color:var(--muted);text-decoration:none}
+  #crumb a:hover{color:var(--accent)}
+  #layout{display:flex;gap:32px;max-width:1180px;margin:0 auto;padding:28px 32px 120px}
+  #content{flex:1;min-width:0;max-width:860px}
+  #toc{width:220px;flex:none;position:sticky;top:60px;align-self:flex-start;max-height:calc(100vh - 80px);overflow:auto;
+    font-size:12.5px;border-left:1px solid var(--border);padding-left:14px;color:var(--muted)}
+  #toc .t{font-weight:600;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  #toc a{display:block;color:var(--muted);text-decoration:none;padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #toc a.h3{padding-left:12px}
+  #toc a:hover,#toc a.cur{color:var(--accent)}
+  @media (max-width:1000px){#toc{display:none}}
+  #changelog{margin-top:3em}
+  #backlinks{margin-top:3em;padding-top:1em;border-top:1px solid var(--border);font-size:13.5px;color:var(--muted)}
+  #backlinks ul{padding-left:1.4em;margin:.4em 0}
+  #backlinks a{color:var(--accent);text-decoration:none}
+  #empty{color:var(--muted);padding:40px;text-align:center}
+  .ext-badge{background:var(--warning);color:#fff;font-size:11px;padding:1px 7px;border-radius:10px;margin-right:4px}
+  /* Markdown */
+  #content h1,#content h2,#content h3,#content h4{line-height:1.3;margin:1.4em 0 .5em;scroll-margin-top:56px}
+  #content h1{font-size:1.9em;border-bottom:1px solid var(--border);padding-bottom:.3em;margin-top:.2em}
+  #content h2{font-size:1.5em;border-bottom:1px solid var(--border);padding-bottom:.25em}
+  #content h3{font-size:1.25em}
+  #content h4{font-size:1.05em}
+  #content a{color:var(--accent);text-decoration:none}
+  #content a:hover{text-decoration:underline}
+  #content a.ext::after{content:" ↗";font-size:.8em;opacity:.6}
+  #content code{background:var(--code-bg);padding:.15em .4em;border-radius:4px;font-size:.88em;
+    font-family:"SF Mono",Consolas,"Liberation Mono",monospace}
+  #content pre.code{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow:auto;border:1px solid var(--border)}
+  #content pre.code code{background:none;padding:0}
+  #content table{border-collapse:collapse;width:100%;margin:1em 0;display:block;overflow:auto}
+  #content th,#content td{border:1px solid var(--border);padding:7px 12px;text-align:left}
+  #content th{background:var(--table-head);font-weight:600}
+  #content blockquote.callout{margin:1em 0;padding:.6em 1em;border-left:4px solid var(--muted);
+    background:var(--callout);border-radius:0 6px 6px 0}
+  #content blockquote.callout-note{border-color:var(--note)}
+  #content blockquote.callout-important{border-color:var(--important)}
+  #content blockquote.callout-warning,#content blockquote.callout-caution{border-color:var(--warning)}
+  #content blockquote.callout-tip{border-color:var(--ok)}
+  #content blockquote p:first-child{margin-top:0}#content blockquote p:last-child{margin-bottom:0}
+  #content hr{border:0;border-top:1px solid var(--border);margin:1.6em 0}
+  #content ul,#content ol{padding-left:1.6em}
+  #content label.task{display:inline-flex;align-items:flex-start;gap:.5em}
+  #content li:has(>label.task){list-style:none;margin-left:-1.2em}
+  #content label.task input{margin-top:.35em;width:15px;height:15px}
+  #content img.diagram{display:block;margin:.6em auto 1em;max-width:100%;cursor:zoom-in;border-radius:6px}
+  /* 內嵌的圖（wiki-build 把 .svg 內容放進 WIKI.svgs）：顏色由下方 diagrams.page_css() 依 data-theme 給 */
+  #content .diagram{display:block;margin:.6em auto 1em;max-width:100%;overflow:auto;text-align:center;cursor:zoom-in}
+  #content .diagram svg.dg{max-width:100%;height:auto}
+  /* 逐步播放：播放列在圖上方；SVG 只切 class（.dg-play／.dg-cur／.dg-dim），不重畫 */
+  #content .dgplay{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:.6em 0 0;font-size:12.5px;color:var(--muted)}
+  #content .dgplay:focus-visible{outline:2px solid var(--accent-soft);outline-offset:2px;border-radius:6px}
+  #content .dgplay button{background:transparent;color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:2px 9px;font-size:12.5px;cursor:pointer}
+  #content .dgplay button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  #content .dgplay button:disabled{opacity:.4;cursor:default}
+  #content .dgplay button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  #content .dgplay .dgstat{min-width:6.5em;text-align:center}
+  #content .dgplay .dgspeed{margin-left:auto;display:inline-flex;gap:4px}
+  #content svg.dg [data-step]{transition:opacity .2s}
+  #content svg.dg-play .dg-dim{opacity:.16}
+  #content svg.dg-play .dg-cur .shape{stroke:var(--accent);stroke-width:2.4}
+  #content svg.dg-play .dg-cur .e,#content svg.dg-play .dg-cur .msg{stroke-width:2.6;filter:drop-shadow(0 0 3px var(--accent))}
+  #content table.seqsteps tr.dg-cur td{background:var(--accent-soft)}
+  #content table.seqsteps tr.dg-dim td{opacity:.45}
+  @media (prefers-reduced-motion:reduce){#content svg.dg [data-step]{transition:none}}
+  #content details.diagram-src{margin:.8em 0 0;font-size:12.5px;color:var(--muted)}
+  #content details.diagram-src summary{cursor:pointer;user-select:none}
+  #content details.diagram-src pre{margin:.4em 0 0}
+  #content img{max-width:100%}
+  #content td img{max-width:180px;max-height:180px;object-fit:contain;display:block}
+  #appflowLink{display:block;padding:6px 8px;border-radius:6px;font-size:13px;color:var(--accent);text-decoration:none;border:1px dashed var(--border)}
+  #appflowLink:hover{background:var(--hover)}
+  #content mark{background:var(--mark);color:inherit}
+  #mmd-lb{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;overflow:hidden}
+  #mmd-lb.open{display:flex}
+  #mmd-lb .stage{background:var(--bg);padding:16px;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);cursor:grab;will-change:transform;user-select:none}
+  #mmd-lb .stage svg{max-width:none!important;height:auto;display:block}
+  #mmd-lb .lb-close{position:fixed;top:14px;right:18px;font-size:24px;color:#fff;background:rgba(0,0,0,.45);border:0;border-radius:8px;width:44px;height:44px;cursor:pointer;line-height:1}
+  #mmd-lb .lb-hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);color:#fff;opacity:.85;font-size:12.5px;background:rgba(0,0,0,.45);padding:5px 12px;border-radius:20px;pointer-events:none}
+  kbd{font:11px "SF Mono",Consolas,monospace;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--muted)}
+  /* 來源：小節結尾的「來源：」行不顯示，改成所屬標題右側的小圖示，點了在右側抽屜列出檔案與行號 */
+  #content p.srcline{display:none}
+  #content .has-src{position:relative;padding-right:34px}
+  #content .srcbtn{position:absolute;right:0;top:50%;transform:translateY(-50%);width:26px;height:26px;padding:0;border:1px solid transparent;border-radius:6px;
+    background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  #content h2 .srcbtn{top:calc(50% - .12em)}
+  #content .srcbtn:hover,#content .srcbtn.on{background:var(--hover);color:var(--accent);border-color:var(--border)}
+  #content .srcbtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  #srcpanel{position:fixed;top:0;right:0;bottom:0;z-index:20;width:min(380px,92vw);background:var(--bg);border-left:1px solid var(--border);
+    box-shadow:-12px 0 34px rgba(0,0,0,.14);display:flex;flex-direction:column;transform:translateX(102%);transition:transform .22s ease}
+  #srcpanel.open{transform:none}
+  #srcpanel header{display:flex;align-items:flex-start;gap:10px;padding:14px 16px 12px;border-bottom:1px solid var(--border)}
+  #srcpanel header div{flex:1;min-width:0}
+  #srcpanel header small{display:block;font-size:11px;letter-spacing:.06em;color:var(--muted)}
+  #srcpanel header b{display:block;font-size:14px;margin-top:2px}
+  #srcpanel ol{list-style:none;margin:0;padding:8px;overflow:auto;flex:1}
+  #srcpanel li a{display:block;padding:9px 10px;border-radius:8px;text-decoration:none;color:var(--fg)}
+  #srcpanel li a:hover{background:var(--hover)}
+  #srcpanel li b{display:flex;align-items:baseline;gap:8px;font-size:13.5px}
+  #srcpanel li b span{font:600 11px "SF Mono",Consolas,monospace;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:1px 6px}
+  #srcpanel li small{display:block;margin-top:2px;font:11.5px "SF Mono",Consolas,monospace;color:var(--muted);overflow-wrap:anywhere}
+  /* API 總覽與端點區塊（配置與配色沿用 app-flow 的 API 總覽）：服務索引頁＝左側導覽＋端點區塊一頁捲；端點頁＝單一區塊 */
+  #layout.wide{max-width:1400px}#layout.wide #content{max-width:none}#layout.wide #toc{display:none}
+  #content .api-page.two{display:grid;grid-template-columns:260px minmax(0,1fr);gap:32px;align-items:start}
+  #content .api-nav{position:sticky;top:56px;max-height:calc(100vh - 80px);overflow:auto}
+  #content .api-search{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px}
+  #content .api-index{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding:6px;background:var(--sidebar);border:1px solid var(--border);border-radius:10px}
+  #content .api-index a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;color:var(--fg);text-decoration:none;font:12px "SF Mono",Consolas,monospace}
+  #content .api-index a:hover{background:var(--hover);text-decoration:none}
+  #content .api-index a.on{background:var(--accent-soft);color:var(--accent)}
+  #content .api-index .pth{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #content .api-index small{display:block;font:11px -apple-system,"Segoe UI","Noto Sans TC",sans-serif;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #content .api-index .hide{display:none}
+  @media (max-width:860px){#content .api-page.two{display:block}#content .api-nav{position:static;max-height:none;margin-bottom:20px}}
+  #content .api-main>h1{margin-top:0}
+  #content .api-main>.sub{color:var(--muted);font-size:14px;margin:-.2em 0 1.4em}
+  #content .api-block{border-top:1px solid var(--border);padding-top:18px;margin-bottom:40px}
+  #content .api-block.hide{display:none}
+  #content .api-block h2.api-h{display:flex;align-items:center;flex-wrap:wrap;gap:10px;border:0;padding-bottom:0;margin:0 0 .4em;font-size:1.15em}
+  #content .api-block h2.api-h code{background:none;padding:0;font-size:15px}
+  #content .api-block h2.api-h .nm{color:var(--muted);font-weight:500;font-size:.88em}
+  #content .api-block h2.api-h .goto{font-size:12px;font-weight:500;margin-left:auto;margin-right:30px}
+  #content .api-block .desc{font-size:14px}
+  #content .api-block .meta{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:6px;color:var(--muted);font-size:13px}
+  #content .api-block .meta b{color:var(--fg);font-weight:600;margin-right:4px}
+  #content .api-block h4{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:1.5em 0 .4em}
+  #content .api-block td,#content .api-block th{font-size:13px}
+  #content .api-block p,#content .api-block ul{margin:.35em 0}
+  #content .api-block p+pre.code{margin-top:.3em}
+  #content .api-block pre.code{border-left:3px solid var(--border)}
+  #content .api-block pre.code.req{border-left-color:var(--accent)}
+  #content .api-block pre.code.resp{border-left-color:var(--important)}
+  #content .api-block pre.code.curl{border-left-color:var(--muted)}
+  #content .pill{font:600 11px "SF Mono",Consolas,monospace;padding:1px 7px;border-radius:5px;border:1px solid var(--border);background:var(--code-bg);color:var(--muted);flex:none}
+  #content .pill.get{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  #content .pill.post{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+  #content .pill.put,#content .pill.patch{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 40%,transparent)}
+  #content .pill.delete{color:var(--err);border-color:color-mix(in srgb,var(--err) 40%,transparent)}
+  /* 時序圖下方的步驟表：由圖的 JSON 產生（同 app-flow 的內部流程步驟表） */
+  #content table.seqsteps td{font-size:13px;vertical-align:top}
+  #content table.seqsteps td:first-child{color:var(--muted);width:2.4em}
+  #content table.seqsteps td:nth-child(2){white-space:nowrap}
+  #content table.seqsteps em{color:var(--muted);font-style:normal;font-weight:600}
+  #content table.seqsteps small{color:var(--muted);margin-left:4px}
+  #content table.seqsteps .bad{color:var(--err);font-weight:600;margin-left:4px}
+  #content table.seqsteps a code{color:var(--accent)}
+  @media print{#sidebar,#resizer,#toolbar,#toc,#srcpanel,.srcbtn,.dgplay{display:none}#main{overflow:visible}#layout{padding:0}}
+svg.dg{font-family:-apple-system,"PingFang TC","Noto Sans TC",Segoe UI,Roboto,sans-serif;--ink:#1f2328;--ink2:#444c56;--ink3:#6e7781;--line:#d0d7de;--line2:#8c959f;--surf:#f6f8fa;--surf2:#eaeef2;--surf3:#dfe4ea;--prim:#ddf4ff;--prim-ink:#0550ae;--tert:#8250df;--tert-bg:#fbefff;--tert-ink:#3e1f79;--err:#cf222e;--warn:#9a6700;--warn-bg:#fff8c5;--ok:#1a7f37;--key:#41546B;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink2);background:transparent}
+:root[data-theme="dark"] svg.dg{--ink:#e6edf3;--ink2:#c9d1d9;--ink3:#8b949e;--line:#30363d;--line2:#484f58;--surf:#161b22;--surf2:#1f2630;--surf3:#2a3340;--prim:#0c2d6b;--prim-ink:#79c0ff;--tert:#a371f7;--tert-bg:#2a1a4a;--tert-ink:#d2b8ff;--err:#f85149;--warn:#d29922;--warn-bg:#3a2e00;--ok:#3fb950;--key:#6e8aa8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) svg.dg{--ink:#e6edf3;--ink2:#c9d1d9;--ink3:#8b949e;--line:#30363d;--line2:#484f58;--surf:#161b22;--surf2:#1f2630;--surf3:#2a3340;--prim:#0c2d6b;--prim-ink:#79c0ff;--tert:#a371f7;--tert-bg:#2a1a4a;--tert-ink:#d2b8ff;--err:#f85149;--warn:#d29922;--warn-bg:#3a2e00;--ok:#3fb950;--key:#6e8aa8}}
+.seq .life{stroke:var(--line);stroke-width:1.2;stroke-dasharray:4 4}
+.seq .act{fill:var(--surf);stroke:var(--line);stroke-width:1.2}.seq .act.ext{stroke-dasharray:4 3}.seq .act.db{fill:var(--surf2)}.seq .act.bus{fill:var(--prim);stroke:transparent}.seq .act.auth{fill:var(--warn-bg)}
+.seq .actx{font-size:12.5px;font-weight:700;fill:var(--ink)}
+.seq .msg{stroke:var(--ink2);stroke-width:1.5;fill:none;color:var(--ink2)}.seq .msg.reply{stroke-dasharray:5 4}.seq .msg.fail{stroke:var(--err);color:var(--err)}
+.seq .msg.evt{stroke:var(--tert);color:var(--tert);stroke-dasharray:2 5;stroke-linecap:round}.seq .msg.auth{stroke:var(--warn);color:var(--warn)}.seq .msg.async{stroke-dasharray:1 4;stroke-linecap:round;opacity:.8}
+.seq .lab{font-size:12px;fill:var(--ink)}.seq .code{font:10.5px var(--mono);fill:var(--ink3)}
+.seq .fr{fill:var(--surf);fill-opacity:.55;stroke:var(--line);stroke-width:1}.seq .fr.loop{stroke-dasharray:6 3}
+.seq .frtag{fill:var(--surf2)}.seq .frtxt{font:700 10.5px var(--mono);fill:var(--ink2)}.seq .frsep{stroke:var(--line);stroke-dasharray:4 3}.seq .frlab{font:700 10.5px var(--mono);fill:var(--ink3)}
+.seq .note{fill:var(--tert-bg);stroke:none}.seq .notex{font-size:11px;fill:var(--tert-ink)}
+.seq .actbar{fill:var(--surf3);stroke:var(--line);stroke-width:1}.seq .actbar.bus{fill:var(--prim)}.seq .actbar.ext{fill:var(--surf2)}.seq .actbar.auth{fill:var(--warn-bg)}
+.seq .phase{stroke:var(--line2);stroke-width:1;stroke-dasharray:2 3}.seq .phasex{font:700 10.5px sans-serif;letter-spacing:.8px;fill:var(--ink3);text-transform:uppercase}
+.seq .tagbg{fill:var(--surf2)}.seq .tag{font:600 10px var(--mono);fill:var(--ink2)}
+.ovw{color:var(--line2)}.ovw .gh{font:700 10.5px sans-serif;letter-spacing:.9px;fill:var(--ink3);text-transform:uppercase}
+.ovw .n rect{fill:var(--surf);stroke:var(--line);stroke-width:1.2}.ovw .n .nt{font-size:13px;font-weight:700;fill:var(--ink)}.ovw .rs{font-size:10.5px;fill:var(--ink3)}
+.ovw .r rect{fill:var(--surf);stroke:var(--line);stroke-width:1.2}.ovw .r.ext rect{stroke-dasharray:4 3}.ovw .r.db rect{fill:var(--surf2)}.ovw .r.bus rect{fill:var(--prim);stroke:transparent}.ovw .r.auth rect{fill:var(--warn-bg)}
+.ovw .r .rt{font-size:12.5px;font-weight:700;fill:var(--ink)}
+.ovw .e{fill:none;stroke:var(--line2);stroke-width:1.3;color:var(--line2)}.ovw .e.write{stroke:var(--prim-ink);color:var(--prim-ink)}.ovw .e.read{stroke:var(--ok);color:var(--ok)}.ovw .e.evt{stroke:var(--tert);color:var(--tert);stroke-dasharray:2 5;stroke-linecap:round}
+.lc{color:var(--ink2)}.lc .s rect{fill:var(--surf);stroke:var(--line2);stroke-width:1.2}.lc .s.start rect{fill:var(--surf2)}.lc .s.success rect{fill:var(--prim);stroke:var(--prim-ink)}.lc .s.failure rect{stroke:var(--err)}.lc .s.waiting rect{stroke-dasharray:5 3}.lc .s.terminal rect{stroke-width:2.4}
+.lc .st{font-size:13px;font-weight:700;fill:var(--ink)}.lc .ss{font-size:10.5px;fill:var(--ink3)}
+.lc .t{fill:none;stroke:var(--ink2);stroke-width:1.4;color:var(--ink2)}.lc .t.fail{stroke:var(--err);color:var(--err)}.lc .t.retry{stroke-dasharray:5 4}.lc .tl{font-size:10.5px;fill:var(--ink2)}
+.flow{color:var(--ink2)}.flow .n .shape{fill:var(--surf);stroke:var(--line2);stroke-width:1.3}.flow .n text{font-size:12.5px;fill:var(--ink)}.flow .n.diamond text{font-size:12px}
+.flow .n.key .shape{fill:var(--key);stroke:var(--key)}.flow .n.key text{fill:#fff}
+.flow .n.db .shape,.flow .n.data .shape{fill:var(--surf2)}.flow .n.ext .shape{stroke-dasharray:4 3}.flow .n.bus .shape{fill:var(--prim);stroke:transparent}.flow .n.auth .shape{fill:var(--warn-bg)}
+.flow .n.start .shape{fill:var(--surf2)}.flow .n.success .shape{fill:var(--prim);stroke:var(--prim-ink)}.flow .n.failure .shape{stroke:var(--err)}.flow .n.waiting .shape{stroke-dasharray:5 3}.flow .n.terminal .shape{stroke-width:2.4}
+.flow .e{fill:none;stroke:var(--ink2);stroke-width:1.4;color:var(--ink2)}.flow .e.fail{stroke:var(--err);color:var(--err)}.flow .e.reply,.flow .e.retry{stroke-dasharray:5 4}
+.flow .e.evt{stroke:var(--tert);color:var(--tert);stroke-dasharray:2 5;stroke-linecap:round}.flow .e.auth{stroke:var(--warn);color:var(--warn)}.flow .e.async{stroke-dasharray:1 4;stroke-linecap:round;opacity:.8}.flow .e.back{stroke:var(--line2);color:var(--line2)}
+.flow .el{font-size:11px;fill:var(--ink2)}.flow .elbg{fill:var(--surf);fill-opacity:.92}
+.flow .g rect{fill:var(--surf);fill-opacity:.45;stroke:var(--line);stroke-dasharray:6 3;stroke-width:1}.flow .g text{font:700 11px sans-serif;fill:var(--ink3);letter-spacing:.5px}
+.er{color:var(--ink2)}.er .ent .box{fill:var(--surf);stroke:var(--line2);stroke-width:1.3}.er .ent .head{fill:var(--surf3)}.er .ent .name{font-size:13px;font-weight:700;fill:var(--ink)}
+.er .ent.view .box{stroke-dasharray:5 3}.er .ent.view .head{fill:var(--surf2)}.er .ent.ext .box{stroke-dasharray:4 3}.er .ent.key .head{fill:var(--key)}.er .ent.key .name{fill:#fff}
+.er .rel.optional{stroke-dasharray:5 4}.er .rel.weak{stroke:var(--line2);color:var(--line2)}
+.er .ent .col{font:11.5px var(--mono);fill:var(--ink2)}.er .ent .col.pk{font-weight:700;fill:var(--ink)}.er .ent .typ{font:10.5px var(--mono);fill:var(--ink3)}.er .ent .sep{stroke:var(--line)}
+.er .rel{fill:none;stroke:var(--ink2);stroke-width:1.3;color:var(--ink2)}.er .rl{font-size:11px;fill:var(--ink2)}.er .rlbg{fill:var(--surf);fill-opacity:.92}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <header>
+      <span class="name" id="siteName"></span>
+      <input id="search" type="search" placeholder="搜尋（/）" autocomplete="off">
+      <a id="appflowLink" style="display:none">🧭 App Flow（畫面、封包、時序）</a>
+    </header>
+    <div id="tree"></div>
+    <div id="results"></div>
+  </div>
+  <div id="resizer"></div>
+  <div id="main">
+    <div id="toolbar">
+      <span id="crumb"></span>
+      <button class="btn" id="prevBtn" title="上一頁 ([)">‹</button>
+      <button class="btn" id="nextBtn" title="下一頁 (])">›</button>
+      <button class="btn" id="themeBtn" title="切換主題">◐</button>
+    </div>
+    <div id="layout">
+      <div id="content"></div>
+      <nav id="toc"></nav>
+    </div>
+  </div>
+</div>
+<aside id="srcpanel" aria-label="參考來源"><header><div><small>參考來源</small><b id="srcTitle"></b></div><button class="btn" id="srcClose" title="關閉 (Esc)">×</button></header><ol id="srcList"></ol></aside>
+
+<script>
+"use strict";
+/* 資料不內嵌：wiki-data/_manifest.js 給頁面清單，每頁一份 wiki-data/pages/**.js（WIKI_PAGE），被引用的 wiki 外文件一份 wiki-data/ext/**.js（WIKI_EXT，點到才載）。
+   這樣兩個 PR 只在改到同一頁時才會碰到同一個檔案。backlinks／順序／搜尋索引都在這裡由載入的頁面推導，不寫進任何資料檔。 */
+let WIKI={svgs:{},seqSteps:{}}, REPO_URL='';
+const PAGES={}, EXT={}, BACK={};
+let ORDER=[], EXTKEYS=new Set(), INDEX=[];
+window.WIKI_PAGE=(k,d)=>{PAGES[k]=d;};
+window.WIKI_EXT=(k,d)=>{EXT[k]=d;};
+const dataPath=(kind,key)=>'wiki-data/'+kind+'/'+key.split('/').map(s=>s==='..'?'__up':s).join('/')+'.js';
+function loadScript(src){return new Promise((ok,fail)=>{const el=document.createElement('script');el.src=src;el.onload=ok;el.onerror=()=>fail(new Error('載入失敗：'+src));document.head.appendChild(el);});}
+function normalizeLink(base,href){const parts=base.split('/').slice(0,-1);
+  for(const seg of href.split('/')){if(seg===''||seg==='.')continue;if(seg==='..'){if(!parts.length)return null;parts.pop();}else parts.push(seg);}
+  return parts.join('/');}
+async function loadData(){
+  await loadScript('wiki-data/_manifest.js');
+  const mf=window.WIKI_MANIFEST;
+  WIKI=Object.assign({svgs:{},seqSteps:{}},mf);REPO_URL=mf.repoUrl||'';
+  ORDER=mf.pages.slice();
+  await Promise.all(ORDER.map(p=>loadScript(encodeURI(dataPath('pages',p)))));
+  const back={};
+  for(const p of ORDER){const d=PAGES[p];
+    Object.assign(WIKI.svgs,d.svgs||{});Object.assign(WIKI.seqSteps,d.seq||{});(d.ext||[]).forEach(k=>EXTKEYS.add(k));
+    for(const m of d.md.matchAll(/\]\(([^)\s#]+\.md)(?:#[^)]*)?\)/g)){const t=normalizeLink(p,m[1]);if(t&&t!==p&&PAGES[t])(back[t]=back[t]||new Set()).add(p);}}
+  const oi=new Map(ORDER.map((p,i)=>[p,i]));
+  for(const t of Object.keys(back))BACK[t]=[...back[t]].sort((a,b)=>oi.get(a)-oi.get(b));
+  INDEX=ORDER.map(p=>({p,title:titleOf(p).toLowerCase(),summary:(PAGES[p].summary||'').toLowerCase(),body:PAGES[p].md.toLowerCase()}));
+}
+
+/* ---------- Markdown renderer (dependency-free; ported from kn-project-viewer) ---------- */
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);}
+function slug(s){return s.trim().toLowerCase().replace(/[^\w一-龥\- ]/g,'').replace(/\s+/g,'-');}
+function splitRow(line){let s=line.trim().replace(/^\|/,'').replace(/\|$/,'');
+  const out=[];let cur='';let escd=false;
+  for(const ch of s){if(escd){cur+=ch;escd=false;}else if(ch==='\\'){escd=true;}
+    else if(ch==='|'){out.push(cur.trim());cur='';}else cur+=ch;}
+  out.push(cur.trim());return out;}
+let CURRENT_REFS={};
+function collectRefs(md){const refs={};md.replace(/^\[([^\]]+)\]:\s*(\S+)/gm,(m,id,url)=>{refs[id]=url;return m;});return refs;}
+function renderInline(s){
+  const codes=[];
+  s=s.replace(/`([^`]+)`/g,(m,c)=>{codes.push(c);return '\u0000'+(codes.length-1)+'\u0000';});
+  s=esc(s);
+  s=s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g,(m,a,src)=>`<img alt="${a}" src="${src}">`);
+  s=s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(m,t,u)=>`<a href="${u}">${t}</a>`);
+  // reference-style：[text][id]、[id][]（定義在 ## References；來源檔連到 repo）
+  s=s.replace(/\[([^\]]+)\]\[([^\]]*)\]/g,(m,t,id)=>{const key=id||t;const u=CURRENT_REFS[key];if(!u)return m;const isSrc=!/^(https?:|#)/.test(u);const href=isSrc&&REPO_URL?REPO_URL.replace(/\/$/,'')+'/blob/'+(WIKI.repoBranch||'main')+'/'+u.replace(/^(\.\.\/)+/,''):u;return `<a class="${isSrc?'src':''}" href="${href}" ${/^https?:/.test(href)?'target="_blank" rel="noopener"':''}>${t}</a>`;});
+  s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g,'$1<em>$2</em>');
+  s=s.replace(/~~([^~]+)~~/g,'<del>$1</del>');
+  s=s.replace(/\u0000(\d+)\u0000/g,(m,i)=>`<code>${esc(codes[i])}</code>`);
+  return s;
+}
+function parseList(lines,start){
+  const entries=[];let i=start;
+  while(i<lines.length){
+    const m=lines[i].match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/);
+    if(m){entries.push({indent:m[1].replace(/\t/g,'  ').length,marker:m[2],text:m[3]});i++;continue;}
+    if(lines[i].trim()===''){ if(i+1<lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i+1])){i++;continue;} }
+    break;
+  }
+  function build(idx,indent){
+    const type=/\d+\./.test(entries[idx].marker)?'ol':'ul';
+    let html='<'+type+'>';
+    while(idx<entries.length && entries[idx].indent>=indent){
+      if(entries[idx].indent>indent)break;
+      const e=entries[idx];idx++;
+      let li;
+      const task=e.text.match(/^\[([ xX])\]\s+(.*)$/);
+      if(task){const ck=task[1].toLowerCase()==='x';
+        li=`<label class="task"><input type="checkbox" disabled ${ck?'checked':''}> <span>${renderInline(task[2])}</span></label>`;
+      }else li=renderInline(e.text);
+      let child='';
+      if(idx<entries.length && entries[idx].indent>indent){const r=build(idx,entries[idx].indent);child=r.html;idx=r.idx;}
+      html+='<li>'+li+child+'</li>';
+    }
+    return {html:html+'</'+type+'>',idx};
+  }
+  const r=build(0,entries[0].indent);
+  return {html:r.html,next:i};
+}
+function renderMarkdown(md){
+  // 技能檔開頭的 YAML front matter 不是內文
+  md=md.replace(/^---\n[\s\S]*?\n---\n/,'');
+  const lines=md.replace(/\r\n/g,'\n').split('\n');
+  const out=[];let i=0;
+  while(i<lines.length){
+    const line=lines[i];
+    const fence=line.match(/^```([\w-]*)(.*)$/);
+    if(fence){const lang=fence[1],info=fence[2].trim();const buf=[];i++;
+      while(i<lines.length && !/^```\s*$/.test(lines[i])){buf.push(lines[i]);i++;}i++;
+      // 圖表定義（JSON 正本）收進摺疊區；圖本身是下一行的 .svg 圖片
+      if(lang==='json'&&/^diagram\b/.test(info)){const sq=seqIndexFor(info,buf.join('\n'));out.push(`<details class="diagram-src"${sq>=0?` data-seq="${sq}"`:''}><summary>圖表定義（JSON）</summary><pre class="code"><code>${esc(buf.join('\n'))}</code></pre></details>`);}
+      else out.push(`<pre class="code"><code>${esc(buf.join('\n'))}</code></pre>`);
+      continue;}
+    if(/^<!--/.test(line.trim())){while(i<lines.length && !/-->/.test(lines[i]))i++;i++;continue;}
+    if(/^\[[^\]]+\]:\s*\S+/.test(line)){i++;continue;}   // reference 定義行不渲染
+    const h=line.match(/^(#{1,6})\s+(.*)$/);
+    if(h){const l=h[1].length;out.push(`<h${l} id="${slug(h[2])}">${renderInline(h[2])}</h${l}>`);i++;continue;}
+    if(/^\s*([-*_])\1{2,}\s*$/.test(line)){out.push('<hr>');i++;continue;}
+    if(/^>\s?/.test(line)){const buf=[];
+      while(i<lines.length && /^>\s?/.test(lines[i])){buf.push(lines[i].replace(/^>\s?/,''));i++;}
+      let inner=buf.join('\n');let cls='callout';const cm=inner.match(/^\[!(\w+)\]/);
+      if(cm){cls+=' callout-'+cm[1].toLowerCase();inner=inner.replace(/^\[!\w+\][^\n]*\n?/,'');}
+      out.push(`<blockquote class="${cls}">${renderMarkdown(inner)}</blockquote>`);continue;}
+    if(line.includes('|') && i+1<lines.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i+1]) && lines[i+1].includes('-')){
+      const header=splitRow(line);i+=2;const rows=[];
+      while(i<lines.length && lines[i].includes('|') && lines[i].trim()!==''){rows.push(splitRow(lines[i]));i++;}
+      let t='<table><thead><tr>'+header.map(c=>`<th>${renderInline(c)}</th>`).join('')+'</tr></thead><tbody>';
+      for(const r of rows)t+='<tr>'+r.map(c=>`<td>${renderInline(c)}</td>`).join('')+'</tr>';
+      out.push(t+'</tbody></table>');continue;}
+    if(/^\s*([-*+]|\d+\.)\s+/.test(line)){const r=parseList(lines,i);out.push(r.html);i=r.next;continue;}
+    if(line.trim()===''){i++;continue;}
+    if(/^來源：/.test(line)){out.push(`<p class="srcline">${renderInline(line.replace(/^來源：/,''))}</p>`);i++;continue;}   // 收進標題旁的來源抽屜（enhanceSources）
+    const buf=[line];i++;
+    while(i<lines.length && lines[i].trim()!=='' &&
+      !/^(#{1,6}\s|>\s?|```|\s*([-*+]|\d+\.)\s+)/.test(lines[i]) &&
+      !/^\s*([-*_])\1{2,}\s*$/.test(lines[i])){buf.push(lines[i]);i++;}
+    out.push(`<p>${renderInline(buf.join('\n')).replace(/\n/g,'<br>')}</p>`);
+  }
+  return out.join('\n');
+}
+
+/* ---------- State & helpers ---------- */
+const EXT_PREFIX='ext:';
+let currentPath=null;
+// 回訪還原捲動位置：站內連結／翻頁是「新造訪」（捲頂或錨點）；← →、重新整理是「回訪」（還原離開時的位置）
+let freshNav=false, restoring=false;
+const scrollKey=p=>'kn-wiki:scroll:'+p;
+function saveScroll(){if(restoring||!currentPath)return;try{sessionStorage.setItem(scrollKey(currentPath),String(document.getElementById('main').scrollTop));}catch(e){}}
+const store={get(k,d){try{const v=localStorage.getItem('kn-wiki:'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
+  set(k,v){try{localStorage.setItem('kn-wiki:'+k,JSON.stringify(v));}catch(e){}}};
+function resolvePath(base,href){
+  href=href.split('#')[0];if(!href)return base;
+  const parts=base.includes('/')?base.slice(0,base.lastIndexOf('/')).split('/'):[];
+  for(const seg of href.split('/')){if(seg==='.'||seg==='')continue;
+    // 往上超過起點時保留 '..'，外部頁（鍵本身以 ../ 開頭）的相對連結才算得對
+    else if(seg==='..'){if(parts.length&&parts[parts.length-1]!=='..')parts.pop();else parts.push('..');}
+    else parts.push(seg);}
+  return parts.join('/');
+}
+// 把任一頁（wiki 頁或外部頁）裡的 href 解析成目標：{page} 或 {ext} 或 {href}（另開分頁，相對 wiki.html）
+function resolveLink(cur,href){
+  const anchor=href.includes('#')?href.split('#')[1]:'';
+  if(cur.startsWith(EXT_PREFIX)){
+    const r=resolvePath(cur.slice(EXT_PREFIX.length),href);
+    if(r.startsWith('wiki/')&&PAGES[r.slice(5)])return {page:r.slice(5),anchor};
+    if(EXTKEYS.has(r))return {ext:r,anchor};
+    return {href:r+(anchor?'#'+anchor:'')};
+  }
+  const r=resolvePath(cur,href);
+  if(PAGES[r])return {page:r,anchor};
+  const e=externalHref(cur,href).split('#')[0];
+  if(EXTKEYS.has(e))return {ext:e,anchor};
+  // 相對連結脫離 wiki 根（References 表格的位置欄）：wiki 在 <repo>/.kn-project/wiki，算出 repo 相對路徑後連到 GitHub blob
+  if(!/^[a-z]+:/i.test(href)&&REPO_URL){const rp=resolvePath('.kn-project/wiki/'+cur,href);if(!rp.startsWith('..'))return {href:REPO_URL.replace(/\/$/,'')+'/blob/'+(WIKI.repoBranch||'main')+'/'+rp};}
+  return {href:externalHref(cur,href)};
+}
+function hashFor(t){return '#'+(t.page!==undefined?encodeURI(t.page):EXT_PREFIX+encodeURI(t.ext))+(t.anchor?'#'+t.anchor:'');}
+// A link that leaves the wiki root (../../archive/x.md, ../../../skills/…) becomes a real relative link from wiki.html,
+// which sits one level above wiki/ — so the target is resolved against "wiki/<page>" instead.
+function externalHref(base,href){return resolvePath('wiki/'+base,href)+(href.includes('#')?'#'+href.split('#')[1]:'');}
+function titleOf(p){return (PAGES[p]&&PAGES[p].title)||(EXT[p]&&EXT[p].title)||p.replace(/\.md$/,'');}
+
+/* ---------- Sidebar tree ---------- */
+const SECTIONS=[['features','功能'],['integrations','整合'],['platform','平台'],['ops','維運'],['dev','開發'],['db','資料庫']];
+const SECTION_LABEL=Object.fromEntries(SECTIONS);
+function buildTree(){
+  // 側欄依五大分類分組：根層頁在最上（index／environment／database／glossary），各分類一段，段內散頁 → 子模組資料夾
+  const roots=ORDER.filter(p=>!p.includes('/'));
+  const closed=new Set(store.get('closed',[]));
+  const li=p=>`<li><a class="f" href="#${encodeURI(p)}" data-path="${esc(p)}">📄 ${esc(titleOf(p))}</a></li>`;
+  let html='<ul>'+roots.map(li).join('')+'</ul>';
+  for(const [sec,label] of SECTIONS){
+    const pages=ORDER.filter(p=>p.startsWith(sec+'/'));
+    if(!pages.length)continue;
+    const loose=pages.filter(p=>p.split('/').length===2);
+    const mods={};for(const p of pages.filter(p=>p.split('/').length>2)){const m=p.split('/')[1];(mods[m]=mods[m]||[]).push(p);}
+    html+=`<span class="sec">${esc(label)}</span><ul>`+loose.map(li).join('');
+    for(const m of Object.keys(mods).sort()){const path=sec+'/'+m;
+      const items=mods[m].sort((a,b)=>(a.endsWith('/index.md')?0:1)-(b.endsWith('/index.md')?0:1)||a.localeCompare(b));
+      html+=`<li class="${closed.has(path)?'closed':''}" data-dir="${esc(path)}"><span class="d">📁 ${esc(m)}</span><ul>${items.map(li).join('')}</ul></li>`;}
+    html+='</ul>';
+  }
+  // 不在五大分類也不在根層的（舊結構）：照目錄樹列，讓人看得到要搬
+  const other=ORDER.filter(p=>p.includes('/')&&!SECTIONS.some(([sec])=>p.startsWith(sec+'/')));
+  if(other.length)html+='<span class="sec">其他</span><ul>'+other.map(li).join('')+'</ul>';
+  document.getElementById('tree').innerHTML=html;
+}
+
+/* ---------- Search ---------- */
+function search(q){
+  q=q.trim().toLowerCase();if(!q)return [];
+  const terms=q.split(/\s+/);
+  return INDEX.map(e=>{let s=0;
+    for(const t of terms){if(e.title.includes(t))s+=6;if(e.summary.includes(t))s+=3;const n=e.body.split(t).length-1;s+=Math.min(n,8);
+      if(!(e.title.includes(t)||e.summary.includes(t)||n))return null;}
+    return {p:e.p,s};}).filter(Boolean).sort((a,b)=>b.s-a.s).slice(0,30);
+}
+function snippet(p,q){const md=PAGES[p].md;const t=q.trim().toLowerCase().split(/\s+/)[0];
+  const i=md.toLowerCase().indexOf(t);const from=Math.max(0,i-40);let s=md.slice(from,from+110).replace(/\n/g,' ');
+  s=esc(s);if(t)s=s.replace(new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig'),m=>'<mark>'+m+'</mark>');return s;}
+let selIdx=0;
+function showResults(q){
+  const box=document.getElementById('results'),tree=document.getElementById('tree');
+  if(!q.trim()){box.style.display='none';tree.style.display='block';return;}
+  const rs=search(q);selIdx=0;
+  box.innerHTML=rs.length?rs.map((r,i)=>`<a class="res ${i===0?'sel':''}" href="#${encodeURI(r.p)}" data-path="${esc(r.p)}"><b>${esc(titleOf(r.p))}</b><small>${snippet(r.p,q)}</small></a>`).join('')
+    :'<div id="empty">沒有符合的頁面</div>';
+  box.style.display='block';tree.style.display='none';
+}
+
+/* ---------- 圖表：wiki 內的 .svg 換成內嵌 SVG（才吃得到頁面主題），點擊放大 ---------- */
+function currentTheme(){const t=document.documentElement.getAttribute('data-theme');
+  return t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}
+function ensureLightbox(){
+  let lb=document.getElementById('mmd-lb');if(lb)return lb;
+  lb=document.createElement('div');lb.id='mmd-lb';
+  lb.innerHTML='<button class="lb-close" title="關閉 (Esc)">×</button><div class="stage"></div><div class="lb-hint">滾輪縮放 · 拖曳平移 · 雙擊重置 · Esc 關閉</div>';
+  document.body.appendChild(lb);
+  const stage=lb.querySelector('.stage');
+  let scale=1,base=1,tx=0,ty=0,drag=false,sx=0,sy=0;
+  const apply=()=>{stage.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;};
+  const reset=()=>{scale=base;tx=0;ty=0;apply();};
+  const close=()=>{lb.classList.remove('open');stage.innerHTML='';};
+  lb.__open=(html)=>{stage.innerHTML=html;lb.classList.add('open');scale=1;tx=0;ty=0;apply();base=1;
+    const svg=stage.querySelector('svg,img');
+    if(svg){const r=svg.getBoundingClientRect();
+      if(r.width&&r.height)base=Math.max(0.2,Math.min(12,Math.min((0.86*innerWidth)/r.width,(0.82*innerHeight)/r.height)));}
+    scale=base;apply();};
+  lb.querySelector('.lb-close').addEventListener('click',close);
+  lb.addEventListener('click',e=>{if(e.target===lb)close();});
+  lb.addEventListener('wheel',e=>{e.preventDefault();const ns=Math.max(0.2,Math.min(12,scale*(e.deltaY<0?1.12:1/1.12)));
+    const k=ns/scale,ex=e.clientX-innerWidth/2,ey=e.clientY-innerHeight/2;
+    tx=ex*(1-k)+k*tx;ty=ey*(1-k)+k*ty;scale=ns;apply();},{passive:false});
+  stage.addEventListener('mousedown',e=>{drag=true;sx=e.clientX-tx;sy=e.clientY-ty;stage.style.cursor='grabbing';e.preventDefault();});
+  window.addEventListener('mousemove',e=>{if(drag){tx=e.clientX-sx;ty=e.clientY-sy;apply();}});
+  window.addEventListener('mouseup',()=>{drag=false;stage.style.cursor='grab';});
+  stage.addEventListener('dblclick',reset);
+  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&lb.classList.contains('open'))close();});
+  return lb;
+}
+/* ---------- 圖表逐步播放：SVG 的 [data-step] 由 diagrams.py 產出（不足兩步的圖沒有標記，也就不出現播放列） ---------- */
+const PLAY_BASE_MS=1600, PLAY_SPEEDS=[0.5,1,2], PLAY_KEYS={next:'ArrowRight',prev:'ArrowLeft',stop:'Escape',toggle:' '};
+function attachPlayer(box){
+  const marks=[...box.querySelectorAll('[data-step]')];
+  const total=marks.reduce((m,el)=>Math.max(m,+el.dataset.step),0);
+  const svg=box.querySelector('svg');
+  if(total<2||!svg)return;
+  const bar=document.createElement('div');bar.className='dgplay';bar.tabIndex=0;
+  bar.setAttribute('role','group');bar.setAttribute('aria-label','圖表逐步播放（← → 切步、空白鍵播放、Esc 重置）');
+  bar.innerHTML='<button type="button" data-act="reset" title="重置 (Esc)">重置</button><button type="button" data-act="prev" title="上一步 (←)">‹ 上一步</button>'+
+    '<span class="dgstat" aria-live="polite"></span><button type="button" data-act="next" title="下一步 (→)">下一步 ›</button>'+
+    '<button type="button" data-act="play" title="自動播放 (空白鍵)"></button>'+
+    '<span class="dgspeed">'+PLAY_SPEEDS.map(v=>`<button type="button" data-speed="${v}" title="播放速度">${v}×</button>`).join('')+'</span>';
+  // 圖外層可能是段落（img 原本在 <p> 裡）：播放列放在它前面，不塞進段落
+  const holder=box.closest('p')||box;
+  holder.before(bar);
+  const stat=bar.querySelector('.dgstat'),prevBtn=bar.querySelector('[data-act=prev]'),nextBtn=bar.querySelector('[data-act=next]'),playBtn=bar.querySelector('[data-act=play]');
+  let cur=0,timer=0,speed=1;
+  // 步驟表由 placeSeqTables 稍後才放進頁面，所以每次套用時才找
+  const tableRows=()=>[...(holder.nextElementSibling?.querySelectorAll('table.seqsteps tr[data-step]')||[])];
+  const mark=(el)=>{const n=+el.dataset.step;el.classList.toggle('dg-cur',cur>0&&n===cur);el.classList.toggle('dg-dim',cur>0&&n>cur);};
+  const apply=()=>{
+    svg.classList.toggle('dg-play',cur>0);
+    marks.forEach(mark);tableRows().forEach(mark);
+    stat.textContent=cur?`第 ${cur} / ${total} 步`:`共 ${total} 步`;
+    prevBtn.disabled=cur===0;nextBtn.disabled=cur===total;
+    playBtn.textContent=timer?'⏸ 暫停':'▶ 播放';
+    bar.querySelectorAll('[data-speed]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.speed===speed)));
+    if(cur)marks.find(el=>+el.dataset.step===cur)?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});
+  };
+  const stop=()=>{clearInterval(timer);timer=0;};
+  const go=(n)=>{stop();cur=Math.max(0,Math.min(total,n));apply();};
+  const tick=()=>{
+    if(!bar.isConnected||cur>=total){stop();apply();return;}
+    cur++;apply();
+  };
+  const start=()=>{
+    if(cur>=total)cur=0;
+    tick();
+    timer=setInterval(tick,PLAY_BASE_MS/speed);
+    apply();
+  };
+  const toggle=()=>{if(timer){stop();apply();}else start();};
+  bar.addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    if(b.dataset.speed){speed=+b.dataset.speed;if(timer){stop();start();}else apply();return;}
+    const acts={reset:()=>go(0),prev:()=>go(cur-1),next:()=>go(cur+1),play:toggle};
+    acts[b.dataset.act]?.();
+  });
+  bar.addEventListener('keydown',e=>{
+    // 焦點在按鈕上時，空白鍵交給按鈕自己的點擊
+    if(e.key===PLAY_KEYS.toggle&&e.target===bar){e.preventDefault();toggle();return;}
+    const acts={[PLAY_KEYS.next]:()=>go(cur+1),[PLAY_KEYS.prev]:()=>go(cur-1),[PLAY_KEYS.stop]:()=>go(0)};
+    if(!acts[e.key])return;
+    e.preventDefault();acts[e.key]();
+  });
+  apply();
+}
+function enhanceDiagrams(){
+  const svgs=WIKI.svgs||{};
+  document.querySelectorAll('#content img').forEach(img=>{
+    const src=img.getAttribute('src')||'';
+    if(!/\.svg(\?|$)/i.test(src))return;
+    let key=src.replace(/^wiki\//,'').split('?')[0];try{key=decodeURI(key);}catch(e){}
+    if(src.startsWith('wiki/')&&svgs[key]){   // wiki 自己的圖：內嵌
+      const box=document.createElement('div');box.className='diagram';box.title='點擊放大';box.innerHTML=svgs[key];
+      img.replaceWith(box);
+      box.addEventListener('click',()=>ensureLightbox().__open(svgs[key]));
+      attachPlayer(box);
+      return;}
+    img.classList.add('diagram');img.title='點擊放大';   // wiki 外的圖（例如 app-flow 截圖）照舊用 <img>
+    img.addEventListener('click',()=>ensureLightbox().__open(`<img src="${src}" alt="${esc(img.alt||'')}" style="max-width:none;display:block">`));
+  });
+}
+
+/* ---------- Content enhancements: copy buttons, table filter／sort, source links ---------- */
+function enhanceContent(){
+  // 每個程式碼區塊一顆複製鈕（範例 curl／JSON 一鍵複製）
+  document.querySelectorAll('#content pre.code').forEach(pre=>{
+    const b=document.createElement('button');b.className='copy';b.type='button';b.textContent='複製';b.title='複製內容';
+    b.addEventListener('click',async()=>{const t=pre.querySelector('code')?.textContent||pre.textContent;
+      try{await navigator.clipboard.writeText(t);}catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}
+      b.textContent='已複製';b.classList.add('done');setTimeout(()=>{b.textContent='複製';b.classList.remove('done');},1200);});
+    pre.appendChild(b);});
+  // 表格：≥ 6 列給搜尋框；表頭可點排序（數字感知）
+  document.querySelectorAll('#content table').forEach(tb=>{
+    const rows=[...tb.tBodies[0]?.rows||[]];if(!rows.length)return;
+    const wrap=document.createElement('div');wrap.className='tblwrap';tb.parentNode.insertBefore(wrap,tb);wrap.appendChild(tb);
+    if(rows.length>=6){const bar=document.createElement('div');bar.className='tblbar';
+      bar.innerHTML=`<input type="search" placeholder="篩選此表…"><small>${rows.length} 列</small>`;wrap.parentNode.insertBefore(bar,wrap);
+      const inp=bar.querySelector('input'),cnt=bar.querySelector('small');
+      inp.addEventListener('input',()=>{const q=inp.value.trim().toLowerCase();let n=0;
+        rows.forEach(r=>{const show=!q||r.textContent.toLowerCase().includes(q);r.style.display=show?'':'none';if(show)n++;});cnt.textContent=`${n} / ${rows.length} 列`;});}
+    [...tb.tHead?.rows[0]?.cells||[]].forEach((th,ci)=>{th.classList.add('sortable');
+      th.addEventListener('click',()=>{const asc=!th.classList.contains('asc');
+        [...tb.tHead.rows[0].cells].forEach(c=>c.classList.remove('asc','desc'));th.classList.add(asc?'asc':'desc');
+        const val=r=>(r.cells[ci]?.textContent||'').trim();const num=v=>/^-?\d+(\.\d+)?$/.test(v);
+        rows.sort((a,b)=>{const x=val(a),y=val(b);const r=(num(x)&&num(y))?(+x-+y):x.localeCompare(y,'zh-Hant');return asc?r:-r;});
+        rows.forEach(r=>tb.tBodies[0].appendChild(r));});});});
+}
+
+/* ---------- 時序圖步驟表：依圖的 JSON 產生（同 app-flow 內部流程的步驟表）；from: app-flow 的步驟由 wiki-build 先展開進 WIKI.seqSteps ---------- */
+const ACTOR_LABEL={client:'Client',handler:'Handler',service:'Service',repo:'Repository',db:'DB',bus:'Event Bus',cache:'Cache',queue:'Queue',auth:'Auth'};
+const actorLabel=a=>(a||'').startsWith('ext:')?a.slice(4)+'（外部）':(ACTOR_LABEL[a]||a||'');
+let DIAGRAM_N=0, SEQ_TABLES=[];
+// "path:line"／"path:12-30"（repo 根相對）→ GitHub 那一行
+function codeLink(code){
+  if(!code)return '';
+  const m=String(code).match(/^(.+?)(?::(\d+)(?:-(\d+))?)?$/),label=`<code>${esc(String(code))}</code>`;
+  if(!REPO_URL||!m)return label;
+  const line=m[2]?'#L'+m[2]+(m[3]?'-L'+m[3]:''):'';
+  return `<a href="${REPO_URL.replace(/\/$/,'')}/blob/${WIKI.repoBranch||'main'}/${esc(m[1])}${line&&/\.md$/i.test(m[1])?'?plain=1':''}${line}" target="_blank" rel="noopener">${label}</a>`;
+}
+function seqRows(steps,depth=0,counter={n:0}){
+  const rows=[];
+  for(const x of steps||[]){
+    const fr=['alt','opt','loop'].find(k=>k in x);
+    if(fr){
+      rows.push([`<em>${fr}${typeof x[fr]==='string'&&x[fr]?'：'+esc(x[fr]):''}</em>`,'','',depth]);rows.push(...seqRows(x.steps,depth+1,counter));
+      if(x.else!=null){rows.push(['<em>else</em>','','',depth]);rows.push(...seqRows(Array.isArray(x.else)?x.else:x.else.steps,depth+1,counter));}
+      continue;}
+    if('note' in x)rows.push(['<em>note</em>',esc(x.note),'',depth]);
+    else if('phase' in x)rows.push([`<em>— ${esc(x.phase)} —</em>`,'','',depth]);
+    else if('emit' in x)rows.push([`${esc(actorLabel(x.from))} → ${esc(actorLabel(x.to||'bus'))}`,'⚡ '+esc(x.emit),codeLink(x.code),depth,++counter.n]);
+    else rows.push([`${esc(actorLabel(x.from))} → ${esc(actorLabel(x.to||x.from))}`,
+      esc(x.text||'')+(x.fail?'<span class="bad">失敗</span>':'')+(x.tag?`<small>[${esc(x.tag)}]</small>`:'')+({auth:'<small>鑑權</small>',async:'<small>非同步</small>'}[x.kind]||''),codeLink(x.code),depth,++counter.n]);
+  }
+  return rows;
+}
+function seqTable(spec){
+  const rows=seqRows(spec.steps);if(!rows.length)return '';
+  return '<div class="tblwrap"><table class="seqsteps"><thead><tr><th>#</th><th>誰 → 誰</th><th>做什麼</th><th>程式碼</th></tr></thead><tbody>'+
+    rows.map((r,i)=>`<tr${r[4]?` data-step="${r[4]}"`:''}><td>${i+1}</td><td style="padding-left:${12+r[3]*16}px">${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')+'</tbody></table></div>';
+}
+// 區塊 JSON → 步驟表的索引（-1＝不是時序圖）；圖 id 規則同 wiki-diagram（id 省略時依頁內順序 圖1、圖2…）
+function seqIndexFor(info,json){
+  DIAGRAM_N++;
+  const id=(info.match(/id=(\S+)/)||[])[1]||'圖'+DIAGRAM_N;
+  let spec=null;try{spec=JSON.parse(json);}catch(e){return -1;}
+  if(spec&&spec.from){const key=currentPath&&!currentPath.startsWith(EXT_PREFIX)?currentPath:'';const r=(WIKI.seqSteps||{})[key+'#'+id];spec=r?{type:'sequence',steps:r.steps}:null;}
+  if(!spec||spec.type!=='sequence'||!spec.steps)return -1;
+  return SEQ_TABLES.push(seqTable(spec))-1;
+}
+// 步驟表放在圖的下面（圖是區塊後那一行的圖片）
+function placeSeqTables(){
+  document.querySelectorAll('#content details.diagram-src[data-seq]').forEach(d=>{
+    const html=SEQ_TABLES[+d.dataset.seq];if(!html)return;
+    const next=d.nextElementSibling,after=next&&next.querySelector('.diagram,img')?next:d;
+    after.insertAdjacentHTML('afterend',html);});
+}
+
+/* ---------- API 總覽：端點頁（api-sop 骨架）畫成 app-flow 式的區塊；服務索引頁＝左側導覽＋全部區塊一頁捲 ---------- */
+function mdSections(md){
+  md=md.replace(/<!--[\s\S]*?-->/g,'').replace(/\n---\n[^\n]*\[🏠 Wiki\][^\n]*\s*$/,'\n');
+  const title=(md.match(/^#\s+(.+)$/m)||[])[1]||'';
+  const secs=md.split(/^## /m).slice(1).map(s=>{const i=s.indexOf('\n');return {h:(i<0?s:s.slice(0,i)).trim(),body:i<0?'':s.slice(i+1)};});
+  return {title,secs,get:h=>secs.find(x=>x.h===h)};
+}
+function isEndpointMd(md){return /^## 端點\s*$/m.test(md)&&/^\*\*方法\*\*/m.test(md);}
+function endpointOf(md){
+  const P=mdSections(md),ep=P.get('端點')||{body:''};
+  return {P,title:P.title,
+    method:((ep.body.match(/^\*\*方法\*\*\s*(\S+)/m)||[])[1]||'').toUpperCase(),
+    path:(ep.body.match(/^```[^\n]*\n([^\n]+)\n```/m)||[])[1]||'',
+    meta:[...ep.body.matchAll(/^\*\*(?!方法)([^*]+)\*\*\s*(.+)$/gm)].map(m=>[m[1],m[2]]),
+    src:(ep.body.match(/^來源：.*$/m)||[])[0]||'',
+    sum:((P.get('Summary')||{body:''}).body).trim()};
+}
+const apiId=e=>slug('api '+e.method+' '+e.path);
+const srcPara=line=>line?`<p class="srcline">${renderInline(line.replace(/^來源：/,''))}</p>`:'';
+function endpointBlock(key,md,overview){
+  const e=endpointOf(md),skip=new Set(['Summary','端點'].concat(overview?['Changelog']:[]));
+  let h=`<div class="api-block" id="${apiId(e)}"><h2 class="api-h"><span class="pill ${e.method.toLowerCase()}">${esc(e.method)}</span><code>${esc(e.path)}</code><span class="nm">${renderInline(e.title)}</span>`+
+    (overview?`<a class="goto" href="#${encodeURI(key)}">開這支的頁 →</a>`:'')+'</h2>'+srcPara(e.src)+
+    `<div class="desc">${renderInline(e.sum)}${e.meta.length?`<div class="meta">${e.meta.map(([k,v])=>`<span><b>${esc(k)}</b>${renderInline(v)}</span>`).join('')}</div>`:''}</div>`;
+  for(const s of e.P.secs){if(skip.has(s.h))continue;
+    h+=(s.h==='Changelog'?'<h2 id="changelog">Changelog</h2>':`<h4>${esc(s.h)}</h4>`)+renderMarkdown(s.body);}
+  return h+'</div>';
+}
+function apiOverview(key,md){
+  const P=mdSections(md),tbl=P.get('端點');if(!tbl)return null;
+  const eps=[];
+  for(const m of tbl.body.matchAll(/^\|\s*\[[^\]]*\]\(([^)\s]+\.md)\)/gm)){const p=resolvePath(key,m[1]);if(PAGES[p]&&isEndpointMd(PAGES[p].md)&&!eps.includes(p))eps.push(p);}
+  if(!eps.length)return null;
+  const E=eps.map(p=>({p,e:endpointOf(PAGES[p].md)}));
+  const nav='<nav class="api-nav"><input class="api-search" type="search" placeholder="篩選端點…"><div class="api-index">'+
+    E.map(({e})=>`<a href="#${encodeURI(key)}#${apiId(e)}" data-target="${apiId(e)}"><span class="pill ${e.method.toLowerCase()}">${esc(e.method)}</span><span class="pth">${esc(e.path)}<small>${esc(e.title)}</small></span></a>`).join('')+'</div></nav>';
+  let main=`<h1 id="${slug(P.title)}">${renderInline(P.title)}</h1>`+srcPara((tbl.body.match(/^來源：.*$/m)||[])[0])+
+    `<p class="sub">${renderInline(((P.get('Summary')||{body:''}).body).trim())}</p>`;
+  for(const s of P.secs)if(!['Summary','端點','Changelog'].includes(s.h))main+=`<h2 id="${slug(s.h)}">${renderInline(s.h)}</h2>`+renderMarkdown(s.body);
+  main+=E.map(({p})=>endpointBlock(p,PAGES[p].md,true)).join('');
+  const cl=P.get('Changelog');if(cl)main+='<h2 id="changelog">Changelog</h2>'+renderMarkdown(cl.body);
+  return `<div class="api-page two">${nav}<div class="api-main">${main}</div></div>`;
+}
+// 範例段的程式碼區塊依前一段的標籤上色：curl／Request／Response
+function tagApiSamples(){
+  document.querySelectorAll('#content .api-block pre.code').forEach(pre=>{
+    const prev=pre.previousElementSibling,t=prev&&prev.tagName==='P'?prev.textContent:'';
+    const cls=/^Request/.test(t)?'req':/^(Response|失敗)/.test(t)?'resp':/^curl\s/.test(pre.textContent)?'curl':'';
+    if(cls)pre.classList.add(cls);});
+}
+function wireApiNav(){
+  const nav=document.querySelector('#content .api-nav');if(!nav)return;
+  const inp=nav.querySelector('.api-search'),links=[...nav.querySelectorAll('a[data-target]')];
+  nav.addEventListener('click',e=>{const a=e.target.closest('a[data-target]');if(!a)return;e.preventDefault();e.stopPropagation();
+    const el=document.getElementById(a.dataset.target);if(el)el.scrollIntoView();history.replaceState(null,'',a.getAttribute('href'));});
+  inp.addEventListener('input',()=>{const q=inp.value.trim().toLowerCase();
+    links.forEach(a=>{const show=!q||a.textContent.toLowerCase().includes(q);a.classList.toggle('hide',!show);
+      const b=document.getElementById(a.dataset.target);if(b)b.classList.toggle('hide',!show);});});
+  trackApiNav();
+}
+function trackApiNav(){
+  const links=[...document.querySelectorAll('#content .api-index a[data-target]')];if(!links.length)return;
+  const top=document.getElementById('main').scrollTop+80;let cur=null;
+  for(const a of links){const el=document.getElementById(a.dataset.target);if(el&&!el.classList.contains('hide')&&el.offsetTop<=top)cur=a;}
+  links.forEach(a=>a.classList.toggle('on',a===cur));
+}
+
+/* ---------- 來源抽屜：小節結尾的「來源：」行收到所屬標題右側的圖示，點了在右側列出 ---------- */
+const LINE_ANCHOR=/^L(\d+)(?:-L(\d+))?$/;
+// 來源連結 → {open: 站內 hash 或另開的 URL, path: repo 相對路徑, line: 'L40' 或 ''}
+function srcTarget(href){
+  const [p,anchor='']=href.split('#');const line=LINE_ANCHOR.test(anchor)?anchor:'';
+  if(/^[a-z]+:/i.test(href))return {open:href,path:href,line:''};
+  const isExt=currentPath.startsWith(EXT_PREFIX);
+  const rp=isExt?resolvePath(currentPath.slice(EXT_PREFIX.length),p):resolvePath('.kn-project/wiki/'+currentPath,p);
+  if(!line){const t=resolveLink(currentPath,p);if(t.page!==undefined||t.ext)return {open:hashFor(t),path:rp,line};}   // 指到 wiki 頁或內嵌的文件：站內開
+  // 有行號，或是原始碼：連到 GitHub 那一行（.md 加 ?plain=1，否則 GitHub 顯示渲染結果、行號錨點無效）
+  if(REPO_URL&&!isExt&&!rp.startsWith('..'))return {open:REPO_URL.replace(/\/$/,'')+'/blob/'+(WIKI.repoBranch||'main')+'/'+rp+(line&&/\.md$/i.test(rp)?'?plain=1':'')+(line?'#'+line:''),path:rp,line};
+  return {open:externalHref(isExt?currentPath.slice(EXT_PREFIX.length):currentPath,p)+(line?'#'+line:''),path:rp,line};
+}
+function lineLabel(l){const m=l.match(LINE_ANCHOR);return !m?'':m[2]?`L${m[1]}–${m[2]}`:`L${m[1]}`;}
+function enhanceSources(){
+  const icon='<svg viewBox="0 0 24 24"><path d="M9 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-3"/><path d="M13 4h7v7M20 4l-9 9"/></svg>';
+  let head=null;const groups=new Map();
+  for(const el of document.querySelectorAll('#content h1,#content h2,#content h3,#content h4,#content p.srcline')){
+    if(/^H[1-6]$/.test(el.tagName))head=el;
+    else if(el.matches('p.srcline')&&head){if(!groups.has(head))groups.set(head,[]);groups.get(head).push(...el.querySelectorAll('a'));}
+  }
+  groups.forEach((links,h)=>{
+    const items=links.map(a=>({name:a.textContent,...srcTarget(a.getAttribute('href')||'')}));
+    const b=document.createElement('button');b.type='button';b.className='srcbtn';b.title=`參考來源（${items.length}）`;b.setAttribute('aria-label','參考來源');b.innerHTML=icon;
+    b.addEventListener('click',e=>{e.stopPropagation();openSources(h,items,b);});
+    h.classList.add('has-src');h.appendChild(b);
+  });
+}
+function openSources(h,items,btn){
+  const panel=document.getElementById('srcpanel');
+  if(panel.classList.contains('open')&&btn.classList.contains('on')){closeSources();return;}
+  document.querySelectorAll('#content .srcbtn.on').forEach(x=>x.classList.remove('on'));btn.classList.add('on');
+  document.getElementById('srcTitle').textContent=h.textContent;
+  document.getElementById('srcList').innerHTML=items.map(it=>{const ext=/^https?:/.test(it.open);
+    return `<li><a href="${esc(it.open)}" ${ext?'target="_blank" rel="noopener"':''}><b>${esc(it.name)}${it.line?`<span>${lineLabel(it.line)}</span>`:''}</b><small>${esc(it.path)}${ext?' ↗':''}</small></a></li>`;}).join('');
+  panel.classList.add('open');
+}
+function closeSources(){document.getElementById('srcpanel').classList.remove('open');document.querySelectorAll('#content .srcbtn.on').forEach(x=>x.classList.remove('on'));}
+
+/* ---------- Page render ---------- */
+function buildToc(){
+  const toc=document.getElementById('toc');const hs=[...document.querySelectorAll('#content h2,#content h3')];
+  if(hs.length<2){toc.innerHTML='';return;}
+  const base=currentPath.startsWith(EXT_PREFIX)?EXT_PREFIX+encodeURI(currentPath.slice(EXT_PREFIX.length)):encodeURI(currentPath);
+  toc.innerHTML='<div class="t">本頁</div>'+hs.map(h=>`<a class="${h.tagName.toLowerCase()}" href="#${base}#${h.id}" data-id="${h.id}">${h.textContent}</a>`).join('');
+}
+function renderBacklinks(path){
+  const refs=(BACK[path]||[]).filter(p=>PAGES[p]);
+  if(!refs.length)return '';
+  return `<div id="backlinks">← 連到本頁的頁面<ul>${refs.map(p=>`<li><a href="#${encodeURI(p)}">${esc(titleOf(p))}</a></li>`).join('')}</ul></div>`;
+}
+function renderChangelog(key){
+  const rows=PAGES[key].changelog||[];
+  if(!rows.length)return '';
+  const up='../'.repeat(key.split('/').length);
+  const NL=String.fromCharCode(10);
+  const cell=c=>String(c).split('|').join('\\|');
+  const line=r=>'| '+[r.date||'—',r.version||'—',r.plan?`[${r.plan}](${up}archive/${r.plan}.md)`:'—',r.note||'—',r.issue||'—',r.pr||'—'].map(cell).join(' | ')+' |';
+  const md=['## Changelog','','| 日期 | 版本 | 計畫 | 變動 | Issue | PR |','|---|---|---|---|---|---|'].concat(rows.map(line)).join(NL);
+  return '<div id="changelog">'+renderMarkdown(md)+'</div>';
+}
+async function openPage(path,anchor){
+  saveScroll();restoring=true;
+  const isExt=path.startsWith(EXT_PREFIX), key=isExt?path.slice(EXT_PREFIX.length):path;
+  if(isExt&&!EXT[key]&&EXTKEYS.has(key)){try{await loadScript(encodeURI(dataPath('ext',key)));}catch(e){}}
+  const page=isExt?EXT[key]:PAGES[key];
+  if(!page){document.getElementById('content').innerHTML=`<div id="empty">找不到頁面：${esc(key)}</div>`;return;}
+  currentPath=path;
+  CURRENT_REFS=collectRefs(page.md);DIAGRAM_N=0;SEQ_TABLES=[];
+  const api=!isExt&&key.startsWith('integrations/');
+  const ov=api&&/(^|\/)index\.md$/.test(key)?apiOverview(key,page.md):null;
+  const html=ov||(api&&isEndpointMd(page.md)?`<div class="api-page">${endpointBlock(key,page.md,false)}</div>`:renderMarkdown(page.md));
+  document.getElementById('layout').classList.toggle('wide',!!ov);
+  document.getElementById('content').innerHTML=html+(isExt?'':renderChangelog(key)+renderBacklinks(key));
+  enhanceContent();
+  closeSources();enhanceSources();
+  // 圖片只引用不內嵌：相對 .md 的 src 改寫成相對 wiki.html（wiki 頁差一層 wiki/，外部頁以其鍵為基準）
+  document.querySelectorAll('#content img').forEach(img=>{const src=img.getAttribute('src')||'';
+    if(/^(https?:|data:|\/)/.test(src))return;img.setAttribute('src',resolvePath(isExt?key:'wiki/'+key,src));});
+  document.title=titleOf(key)+' · '+WIKI.title;
+  const segs=key.split('/');
+  document.getElementById('crumb').innerHTML=(isExt?'<span class="ext-badge">wiki 外</span> ':'')+segs.map((s,i)=>i<segs.length-1?esc(s)+' / ':`<a href="${hashFor(isExt?{ext:key}:{page:key})}">${esc(s)}</a>`).join('');
+  document.querySelectorAll('#tree .f').forEach(a=>a.classList.toggle('active',a.dataset.path===key&&!isExt));
+  const i=isExt?-1:ORDER.indexOf(key);document.getElementById('prevBtn').disabled=i<=0;document.getElementById('nextBtn').disabled=i<0||i>=ORDER.length-1;
+  buildToc();
+  enhanceDiagrams();placeSeqTables();tagApiSamples();wireApiNav();
+  const main=document.getElementById('main');
+  const fresh=freshNav;freshNav=false;
+  let saved=0;try{saved=+(sessionStorage.getItem(scrollKey(path))||0);}catch(e){}
+  if(!fresh&&saved)main.scrollTop=saved;
+  else if(anchor){const el=document.getElementById(slug(decodeURIComponent(anchor)));if(el)el.scrollIntoView();else main.scrollTop=0;}
+  else main.scrollTop=0;
+  restoring=false;
+}
+function route(){
+  const h=decodeURI((location.hash||'').replace(/^#/,''));
+  const [path,anchor]=h.split('#');
+  const ok=path&&(PAGES[path]||(path.startsWith(EXT_PREFIX)&&EXTKEYS.has(path.slice(EXT_PREFIX.length))));
+  const target=ok?path:(PAGES['index.md']?'index.md':ORDER[0]);
+  if(!ok)history.replaceState(null,'','#'+encodeURI(target));
+  openPage(target,anchor||'');
+}
+
+/* ---------- Theme ---------- */
+function applyTheme(t){if(t)document.documentElement.setAttribute('data-theme',t);else document.documentElement.removeAttribute('data-theme');
+  store.set('theme',t||'');document.getElementById('themeBtn').textContent=t==='dark'?'☾':t==='light'?'☀':'◐';}
+function cycleTheme(){const cur=store.get('theme','');applyTheme(cur===''?'light':cur==='light'?'dark':'');
+  if(currentPath)openPage(currentPath,'');}
+
+/* ---------- Events ---------- */
+function wireEvents(){
+  const tree=document.getElementById('tree');
+  tree.addEventListener('click',e=>{const d=e.target.closest('span.d');if(!d)return;
+    const li=d.parentElement;li.classList.toggle('closed');
+    const closed=[...tree.querySelectorAll('li.closed')].map(x=>x.dataset.dir);store.set('closed',closed);});
+  document.getElementById('content').addEventListener('click',e=>{
+    const a=e.target.closest('a');if(!a)return;const href=a.getAttribute('href')||'';
+    if(/^https?:|^mailto:/.test(href)){a.target='_blank';return;}
+    if(href.startsWith('#')&&!href.slice(1).includes('#')&&!href.slice(1).endsWith('.md')){
+      e.preventDefault();const el=document.getElementById(slug(decodeURIComponent(href.slice(1))));if(el)el.scrollIntoView();return;}
+    if(href.startsWith('#'))return;
+    e.preventDefault();
+    const t=resolveLink(currentPath,href);
+    if(t.href)window.open(t.href,'_blank');else{freshNav=true;location.hash=hashFor(t);}});
+  // 側欄、搜尋、TOC、麵包屑、反向連結都是 <a href="#…">：點了就是新造訪
+  document.addEventListener('click',e=>{if(e.target.closest('a[href^="#"]'))freshNav=true;});
+  // 只有真的會另開分頁的連結標 ↗；內嵌的外部文件在站內開
+  new MutationObserver(()=>{document.querySelectorAll('#content a:not([href^="#"]):not([href^="http"]):not(.ext):not(.int)').forEach(a=>{
+    a.classList.add(resolveLink(currentPath,a.getAttribute('href')).href?'ext':'int');});}).observe(document.getElementById('content'),{childList:true});
+  const searchEl=document.getElementById('search');
+  searchEl.addEventListener('input',()=>showResults(searchEl.value));
+  searchEl.addEventListener('keydown',e=>{const rs=[...document.querySelectorAll('#results .res')];
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(!rs.length)return;rs[selIdx]?.classList.remove('sel');
+      selIdx=(selIdx+(e.key==='ArrowDown'?1:-1)+rs.length)%rs.length;rs[selIdx].classList.add('sel');rs[selIdx].scrollIntoView({block:'nearest'});}
+    else if(e.key==='Enter'){if(rs[selIdx]){freshNav=true;location.hash=rs[selIdx].getAttribute('href');searchEl.value='';showResults('');searchEl.blur();}}
+    else if(e.key==='Escape'){searchEl.value='';showResults('');searchEl.blur();}});
+  document.getElementById('results').addEventListener('click',()=>{searchEl.value='';showResults('');});
+  document.getElementById('prevBtn').addEventListener('click',()=>{const i=ORDER.indexOf(currentPath);if(i>0){freshNav=true;location.hash='#'+encodeURI(ORDER[i-1]);}});
+  document.getElementById('nextBtn').addEventListener('click',()=>{const i=ORDER.indexOf(currentPath);if(i<ORDER.length-1){freshNav=true;location.hash='#'+encodeURI(ORDER[i+1]);}});
+  document.getElementById('themeBtn').addEventListener('click',cycleTheme);
+  document.getElementById('srcClose').addEventListener('click',closeSources);
+  document.getElementById('srcList').addEventListener('click',e=>{const a=e.target.closest('a');if(a&&a.getAttribute('href').startsWith('#')){freshNav=true;closeSources();}});
+  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('srcpanel').classList.contains('open'))closeSources();});
+  window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;
+    if(e.key==='/'){e.preventDefault();searchEl.focus();}
+    else if(e.key==='[')document.getElementById('prevBtn').click();
+    else if(e.key===']')document.getElementById('nextBtn').click();});
+  window.addEventListener('hashchange',route);
+  // TOC highlight while scrolling
+  let scrollTick=false;
+  document.getElementById('main').addEventListener('scroll',()=>{
+    if(!scrollTick){scrollTick=true;requestAnimationFrame(()=>{scrollTick=false;saveScroll();trackApiNav();});}
+    const links=[...document.querySelectorAll('#toc a')];if(!links.length)return;
+    const top=document.getElementById('main').scrollTop+70;let cur=links[0];
+    for(const a of links){const el=document.getElementById(a.dataset.id);if(el&&el.offsetTop<=top)cur=a;}
+    links.forEach(a=>a.classList.toggle('cur',a===cur));},{passive:true});
+  const rz=document.getElementById('resizer'),sb=document.getElementById('sidebar');
+  rz.addEventListener('mousedown',e=>{e.preventDefault();
+    const mv=ev=>{sb.style.width=Math.max(160,Math.min(ev.clientX,window.innerWidth*0.46))+'px';};
+    const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);store.set('sbw',sb.style.width);};
+    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);});
+  const w=store.get('sbw','');if(w)sb.style.width=w;
+}
+
+/* ---------- Boot ---------- */
+function boot(){
+  document.getElementById('siteName').textContent='📚 '+WIKI.title;
+  applyTheme(store.get('theme',''));
+  if(WIKI.appflow){const a=document.getElementById('appflowLink');a.href=WIKI.appflow;a.style.display='block';}
+  buildTree();wireEvents();route();
+}
+loadData().then(boot).catch(e=>{document.getElementById('content').innerHTML='<div id="empty">載入 wiki-data 失敗：'+esc(String(e.message||e))+'</div>';});
+</script>
+</body>
+</html>

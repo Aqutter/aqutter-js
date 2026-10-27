@@ -1,0 +1,11 @@
+window.WIKI_MANIFEST={
+"title":"aqutter-js",
+"repoUrl":"https://github.com/Aqutter/aqutter-js",
+"repoBranch":"main",
+"appflow":null,
+"pages":[
+"index.md",
+"platform/endpoint.md",
+"platform/transport.md",
+]
+};

@@ -25,24 +25,15 @@ class FakeSocket {
   }
 }
 
-const handlers: string[] = []
-
 const load = async () => await import('../src/index')
 
 describe('public API over the transport', () => {
   beforeEach(() => {
     FakeSocket.instances = []
-    handlers.length = 0
     vi.resetModules()
     vi.stubGlobal('WebSocket', FakeSocket)
-    vi.stubGlobal('window', {
-      aqutter: {
-        callHandler: async (name: string) => {
-          handlers.push(name)
-          return { port: 4242, token: 'tok' }
-        },
-      },
-    })
+    // 殼注入的連線資訊；刻意沒有 window.aqutter（舊的橋接物件），client 不該再需要它
+    vi.stubGlobal('window', { aqutterEndpoint: { port: 4242, token: 'tok' } })
   })
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -65,7 +56,7 @@ describe('public API over the transport', () => {
     const { callPluginRaw } = await load()
     const call = callPluginRaw('maps', 'moveTo', { lat: 1 })
     const socket = await connected()
-    expect(handlers).toEqual(['native_endpoint'])
+    expect(socket.url).toBe('ws://127.0.0.1:4242/channel/aqutter.rpc?token=tok')
     expect(socket.sent[0]).toMatchObject({ t: 'call', name: 'maps.moveTo', p: { lat: 1 } })
     reply(socket, { t: 'res', id: socket.sent[0]!.id!, p: { ok: true } })
     await expect(call).resolves.toEqual({ ok: true })
@@ -91,11 +82,8 @@ describe('public API over the transport', () => {
     expect((error as Error).message).toBe('UNSUPPORTED_PLATFORM: maps.moveTo is not supported on linux')
   })
 
-  it('callFlutter keeps native_endpoint on callHandler and sends everything else over the transport', async () => {
+  it('callFlutter sends every handler over the transport, and there is no callHandler path', async () => {
     const { callFlutter } = await load()
-    const endpoint = await callFlutter('native_endpoint' as never)
-    expect(endpoint).toEqual({ port: 4242, token: 'tok' })
-    expect(FakeSocket.instances).toHaveLength(0)
     const call = callFlutter('platform_info' as never)
     const socket = await connected()
     expect(socket.sent[0]).toMatchObject({ t: 'call', name: 'platform_info' })

@@ -1,0 +1,103 @@
+<!-- wiki-diagram 7d1cd0c358243f22261e33899cdb192de50623490a6790336a06f503bde4a766 98a4c967b55288977ae84e93dc6b16f5bd5d0f33f14ff3ea392c73e04b50bc1f -->
+<svg class="dg flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 333 662" width="333" height="662" role="img" aria-label="連線與重連">
+<title>連線與重連</title>
+<desc>在殼內才建立連線；讀取連線資訊後連線，失敗就退避等待並重新讀取</desc>
+<style>
+svg.dg{font-family:-apple-system,"PingFang TC","Noto Sans TC",Segoe UI,Roboto,sans-serif;
+  --ink:#1f2328;--ink2:#444c56;--ink3:#6e7781;--line:#d0d7de;--line2:#8c959f;--surf:#f6f8fa;--surf2:#eaeef2;--surf3:#dfe4ea;--prim:#ddf4ff;--prim-ink:#0550ae;--tert:#8250df;--tert-bg:#fbefff;--tert-ink:#3e1f79;--err:#cf222e;--warn:#9a6700;--warn-bg:#fff8c5;--ok:#1a7f37;--key:#41546B;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--ink2);background:transparent}
+@media (prefers-color-scheme:dark){svg.dg{--ink:#e6edf3;--ink2:#c9d1d9;--ink3:#8b949e;--line:#30363d;--line2:#484f58;--surf:#161b22;--surf2:#1f2630;--surf3:#2a3340;--prim:#0c2d6b;--prim-ink:#79c0ff;--tert:#a371f7;--tert-bg:#2a1a4a;--tert-ink:#d2b8ff;--err:#f85149;--warn:#d29922;--warn-bg:#3a2e00;--ok:#3fb950;--key:#6e8aa8}}
+.seq .life{stroke:var(--line);stroke-width:1.2;stroke-dasharray:4 4}
+.seq .act{fill:var(--surf);stroke:var(--line);stroke-width:1.2}.seq .act.ext{stroke-dasharray:4 3}.seq .act.db{fill:var(--surf2)}.seq .act.bus{fill:var(--prim);stroke:transparent}.seq .act.auth{fill:var(--warn-bg)}
+.seq .actx{font-size:12.5px;font-weight:700;fill:var(--ink)}
+.seq .msg{stroke:var(--ink2);stroke-width:1.5;fill:none;color:var(--ink2)}.seq .msg.reply{stroke-dasharray:5 4}.seq .msg.fail{stroke:var(--err);color:var(--err)}
+.seq .msg.evt{stroke:var(--tert);color:var(--tert);stroke-dasharray:2 5;stroke-linecap:round}.seq .msg.auth{stroke:var(--warn);color:var(--warn)}.seq .msg.async{stroke-dasharray:1 4;stroke-linecap:round;opacity:.8}
+.seq .lab{font-size:12px;fill:var(--ink)}.seq .code{font:10.5px var(--mono);fill:var(--ink3)}
+.seq .fr{fill:var(--surf);fill-opacity:.55;stroke:var(--line);stroke-width:1}.seq .fr.loop{stroke-dasharray:6 3}
+.seq .frtag{fill:var(--surf2)}.seq .frtxt{font:700 10.5px var(--mono);fill:var(--ink2)}.seq .frsep{stroke:var(--line);stroke-dasharray:4 3}.seq .frlab{font:700 10.5px var(--mono);fill:var(--ink3)}
+.seq .note{fill:var(--tert-bg);stroke:none}.seq .notex{font-size:11px;fill:var(--tert-ink)}
+.seq .actbar{fill:var(--surf3);stroke:var(--line);stroke-width:1}.seq .actbar.bus{fill:var(--prim)}.seq .actbar.ext{fill:var(--surf2)}.seq .actbar.auth{fill:var(--warn-bg)}
+.seq .phase{stroke:var(--line2);stroke-width:1;stroke-dasharray:2 3}.seq .phasex{font:700 10.5px sans-serif;letter-spacing:.8px;fill:var(--ink3);text-transform:uppercase}
+.seq .tagbg{fill:var(--surf2)}.seq .tag{font:600 10px var(--mono);fill:var(--ink2)}
+.ovw{color:var(--line2)}.ovw .gh{font:700 10.5px sans-serif;letter-spacing:.9px;fill:var(--ink3);text-transform:uppercase}
+.ovw .n rect{fill:var(--surf);stroke:var(--line);stroke-width:1.2}.ovw .n .nt{font-size:13px;font-weight:700;fill:var(--ink)}.ovw .rs{font-size:10.5px;fill:var(--ink3)}
+.ovw .r rect{fill:var(--surf);stroke:var(--line);stroke-width:1.2}.ovw .r.ext rect{stroke-dasharray:4 3}.ovw .r.db rect{fill:var(--surf2)}.ovw .r.bus rect{fill:var(--prim);stroke:transparent}.ovw .r.auth rect{fill:var(--warn-bg)}
+.ovw .r .rt{font-size:12.5px;font-weight:700;fill:var(--ink)}
+.ovw .e{fill:none;stroke:var(--line2);stroke-width:1.3;color:var(--line2)}.ovw .e.write{stroke:var(--prim-ink);color:var(--prim-ink)}.ovw .e.read{stroke:var(--ok);color:var(--ok)}.ovw .e.evt{stroke:var(--tert);color:var(--tert);stroke-dasharray:2 5;stroke-linecap:round}
+.lc{color:var(--ink2)}.lc .s rect{fill:var(--surf);stroke:var(--line2);stroke-width:1.2}.lc .s.start rect{fill:var(--surf2)}.lc .s.success rect{fill:var(--prim);stroke:var(--prim-ink)}.lc .s.failure rect{stroke:var(--err)}.lc .s.waiting rect{stroke-dasharray:5 3}.lc .s.terminal rect{stroke-width:2.4}
+.lc .st{font-size:13px;font-weight:700;fill:var(--ink)}.lc .ss{font-size:10.5px;fill:var(--ink3)}
+.lc .t{fill:none;stroke:var(--ink2);stroke-width:1.4;color:var(--ink2)}.lc .t.fail{stroke:var(--err);color:var(--err)}.lc .t.retry{stroke-dasharray:5 4}.lc .tl{font-size:10.5px;fill:var(--ink2)}
+.flow{color:var(--ink2)}.flow .n .shape{fill:var(--surf);stroke:var(--line2);stroke-width:1.3}.flow .n text{font-size:12.5px;fill:var(--ink)}.flow .n.diamond text{font-size:12px}
+.flow .n.key .shape{fill:var(--key);stroke:var(--key)}.flow .n.key text{fill:#fff}
+.flow .n.db .shape,.flow .n.data .shape{fill:var(--surf2)}.flow .n.ext .shape{stroke-dasharray:4 3}.flow .n.bus .shape{fill:var(--prim);stroke:transparent}.flow .n.auth .shape{fill:var(--warn-bg)}
+.flow .n.start .shape{fill:var(--surf2)}.flow .n.success .shape{fill:var(--prim);stroke:var(--prim-ink)}.flow .n.failure .shape{stroke:var(--err)}.flow .n.waiting .shape{stroke-dasharray:5 3}.flow .n.terminal .shape{stroke-width:2.4}
+.flow .e{fill:none;stroke:var(--ink2);stroke-width:1.4;color:var(--ink2)}.flow .e.fail{stroke:var(--err);color:var(--err)}.flow .e.reply,.flow .e.retry{stroke-dasharray:5 4}
+.flow .e.evt{stroke:var(--tert);color:var(--tert);stroke-dasharray:2 5;stroke-linecap:round}.flow .e.auth{stroke:var(--warn);color:var(--warn)}.flow .e.async{stroke-dasharray:1 4;stroke-linecap:round;opacity:.8}.flow .e.back{stroke:var(--line2);color:var(--line2)}
+.flow .el{font-size:11px;fill:var(--ink2)}.flow .elbg{fill:var(--surf);fill-opacity:.92}
+.flow .g rect{fill:var(--surf);fill-opacity:.45;stroke:var(--line);stroke-dasharray:6 3;stroke-width:1}.flow .g text{font:700 11px sans-serif;fill:var(--ink3);letter-spacing:.5px}
+.er{color:var(--ink2)}.er .ent .box{fill:var(--surf);stroke:var(--line2);stroke-width:1.3}.er .ent .head{fill:var(--surf3)}.er .ent .name{font-size:13px;font-weight:700;fill:var(--ink)}
+.er .ent.view .box{stroke-dasharray:5 3}.er .ent.view .head{fill:var(--surf2)}.er .ent.ext .box{stroke-dasharray:4 3}.er .ent.key .head{fill:var(--key)}.er .ent.key .name{fill:#fff}
+.er .rel.optional{stroke-dasharray:5 4}.er .rel.weak{stroke:var(--line2);color:var(--line2)}
+.er .ent .col{font:11.5px var(--mono);fill:var(--ink2)}.er .ent .col.pk{font-weight:700;fill:var(--ink)}.er .ent .typ{font:10.5px var(--mono);fill:var(--ink3)}.er .ent .sep{stroke:var(--line)}
+.er .rel{fill:none;stroke:var(--ink2);stroke-width:1.3;color:var(--ink2)}.er .rl{font-size:11px;fill:var(--ink2)}.er .rlbg{fill:var(--surf);fill-opacity:.92}
+</style>
+<defs><marker id="flAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5 0 10z" fill="currentColor"/></marker></defs>
+<g data-step="2">
+<path class="e" d="M144 69 L144 119" marker-end="url(#flAr)"/>
+</g>
+<g data-step="3">
+<path class="e fail" d="M144 186 L144 220 L214 220 L214 247" marker-end="url(#flAr)"/>
+<rect class="elbg" x="203" y="202" width="21" height="17" rx="3"/>
+<text class="el" x="214" y="214" text-anchor="middle">否</text>
+</g>
+<g data-step="3">
+<path class="e" d="M144 186 L144 220 L94 220 L94 247" marker-end="url(#flAr)"/>
+<rect class="elbg" x="83" y="202" width="21" height="17" rx="3"/>
+<text class="el" x="94" y="214" text-anchor="middle">是</text>
+</g>
+<g data-step="4">
+<path class="e" d="M94 292 L94 326 L144 326 L144 353" marker-end="url(#flAr)"/>
+</g>
+<g data-step="5">
+<path class="e" d="M144 398 L144 459" marker-end="url(#flAr)"/>
+</g>
+<g data-step="6">
+<path class="e" d="M144 526 L144 560 L88 560 L88 587" marker-end="url(#flAr)"/>
+<rect class="elbg" x="77" y="542" width="21" height="17" rx="3"/>
+<text class="el" x="87" y="554" text-anchor="middle">是</text>
+</g>
+<g data-step="6">
+<path class="e fail" d="M144 526 L144 560 L220 560 L220 587" marker-end="url(#flAr)"/>
+<rect class="elbg" x="209" y="542" width="21" height="17" rx="3"/>
+<text class="el" x="220" y="554" text-anchor="middle">否</text>
+</g>
+<g data-step="6">
+<path class="e retry back" d="M259 612 L283 612 L283 272 L152 272" marker-end="url(#flAr)"/>
+<rect class="elbg" x="256" y="430" width="54" height="17" rx="3"/>
+<text class="el" x="283" y="442" text-anchor="middle">重新讀取</text>
+</g>
+<g class="n rect start" data-step="1"><rect class="shape" x="99" y="30" width="90" height="39" rx="3"/>
+<text x="144" y="53" text-anchor="middle">第一次使用</text>
+</g>
+<g class="n diamond" data-step="2"><path class="shape" d="M144 125 L195 155 L144 186 L93 155 Z"/>
+<text x="144" y="159" text-anchor="middle">在殼內?</text>
+</g>
+<g class="n rect failure" data-step="3"><rect class="shape" x="181" y="253" width="65" height="39" rx="3"/>
+<text x="214" y="276" text-anchor="middle">不連線</text>
+</g>
+<g class="n rect" data-step="3"><rect class="shape" x="42" y="253" width="103" height="39" rx="3"/>
+<text x="94" y="276" text-anchor="middle">讀取連線資訊</text>
+</g>
+<g class="n rect" data-step="4"><rect class="shape" x="105" y="359" width="78" height="39" rx="3"/>
+<text x="144" y="382" text-anchor="middle">建立連線</text>
+</g>
+<g class="n diamond" data-step="5"><path class="shape" d="M144 465 L202 495 L144 526 L87 495 Z"/>
+<text x="144" y="499" text-anchor="middle">連線成功?</text>
+</g>
+<g class="n rect key" data-step="6"><rect class="shape" x="30" y="593" width="115" height="39" rx="3"/>
+<text x="87" y="616" text-anchor="middle">送出排隊的呼叫</text>
+</g>
+<g class="n rect" data-step="6"><rect class="shape" x="181" y="593" width="78" height="39" rx="3"/>
+<text x="220" y="616" text-anchor="middle">退避等待</text>
+</g>
+</svg>
