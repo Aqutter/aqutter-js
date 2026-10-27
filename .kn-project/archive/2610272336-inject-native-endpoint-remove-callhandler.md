@@ -57,3 +57,10 @@ client 改讀殼注入的 `window.aqutterEndpoint` 取得本機傳輸的連線�
 
 ## Details
 不相容升級：舊網頁包搭新殼不能用（新殼不再回應 `native_endpoint`、也不注入給舊 client 判斷是否在殼內的物件），網頁包必須用新 client 重打（`aqutter seed`）。`window.aqutter`（平台層橋接物件）仍由核心注入，但已不屬於框架契約。
+
+## Wiki Changes
+
+| 頁面 | 日期 | 版本 | 變動 | Issue | PR |
+|---|---|---|---|---|---|
+| `platform/endpoint.md` | 2026-10-28 | — | 建立 | [#12](https://github.com/Aqutter/aqutter-js/issues/12) | [PR #13](https://github.com/Aqutter/aqutter-js/pull/13) |
+| `platform/transport.md` | 2026-10-28 | — | 建立 | [#12](https://github.com/Aqutter/aqutter-js/issues/12) | [PR #13](https://github.com/Aqutter/aqutter-js/pull/13) |
