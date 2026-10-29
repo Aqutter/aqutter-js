@@ -118,6 +118,7 @@ export type BridgeContract = {
   [BridgeHandler.LogDir]: { req: NoPayload, res: LogDirResponse }
   [BridgeHandler.LogAppend]: { req: LogAppendRequest, res: OkResponse }
   [BridgeHandler.LogSetKey]: { req: LogSetKeyRequest, res: OkResponse }
+  [BridgeHandler.CrashTake]: { req: NoPayload, res: CrashReportsPayload }
   [BridgeHandler.CrashAck]: { req: CrashAckRequest, res: OkResponse }
   [BridgeHandler.ErrorReport]: { req: ErrorReportRequest, res: OkResponse }
 

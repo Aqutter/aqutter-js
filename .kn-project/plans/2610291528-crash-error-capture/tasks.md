@@ -7,3 +7,6 @@
 - [x] [aqutter-js] `console.ts`：`errors`、`crashTarget`、crash 寫入與 ack　依賴 Contract §2–3
 - [x] [aqutter-js] `index.ts` 接線
 - [x] [aqutter-js] 測試、`pnpm typecheck`、`pnpm test`
+
+## Phase 3 — rev 2：crash_take
+- [x] [aqutter-js] `BridgeHandler.CrashTake` 與型別；`installConsoleLog` 安裝時拉取（含 50 筆分批、id 去重）；測試

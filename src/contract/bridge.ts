@@ -45,6 +45,11 @@ export enum BridgeHandler {
   LogAppend = 'log_append',
   /** 設定 log 檔名 key；檔名為 `{key}_{本地日期}.log`，可執行中變更。 */
   LogSetKey = 'log_set_key',
+  /**
+   * 取回殼端目前所有未確認的 crash 紀錄（最多 50 筆，由舊到新）；同時告知殼「JS 已可接收」，
+   * 之後的新紀錄才會以 {@link BridgeEvent.CrashReports} 推送。回應為 {@link CrashReportsPayload}。
+   */
+  CrashTake = 'crash_take',
   /** 確認已把 crash 紀錄寫入目標檔案；殼據此刪除對應的待送紀錄。 */
   CrashAck = 'crash_ack',
   /** 回報網頁的未捕捉錯誤，供殼的 AqutterErrorReporter 使用（不寫檔）。 */
@@ -190,8 +195,8 @@ export enum BridgeEvent {
   /** 更新流程（網頁包／殼）的每個狀態，payload 為 {@link UpdateStatePayload}。 */
   UpdateState = 'update_state',
   /**
-   * 殼端尚未被確認的 crash／錯誤紀錄，payload 為 {@link CrashReportsPayload}。
-   * 於 `app_ready` 之後送出，之後每次有新紀錄也會送；JS 寫入目標檔案後以 {@link BridgeHandler.CrashAck} 確認。
+   * 殼端新記下的 crash／錯誤紀錄（一次一筆），payload 為 {@link CrashReportsPayload}。
+   * 只在 JS 呼叫過 {@link BridgeHandler.CrashTake} 之後才會送；JS 寫入目標檔案後以 {@link BridgeHandler.CrashAck} 確認。
    */
   CrashReports = 'crash_reports',
 }
@@ -291,7 +296,7 @@ export interface CrashReportPayload {
   extra?: Record<string, string>
 }
 
-/** {@link BridgeEvent.CrashReports} 的 payload（一次最多 50 筆，依 time 由舊到新）。 */
+/** {@link BridgeEvent.CrashReports} 的 payload（一筆）與 {@link BridgeHandler.CrashTake} 的回應（最多 50 筆，依 time 由舊到新）。 */
 export interface CrashReportsPayload {
   reports: CrashReportPayload[]
 }

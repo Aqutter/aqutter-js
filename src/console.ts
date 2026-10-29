@@ -65,6 +65,8 @@ export interface ConsoleLogDeps {
   console: Console
   /** 訂閱殼送來的 crash 紀錄；回傳取消訂閱。 */
   onCrashReports?: (listener: (payload: CrashReportsPayload) => void) => () => void
+  /** 取回殼端未確認的 crash 紀錄（最多一批）並告知殼可開始推送；失敗（如舊殼沒有此 handler）請丟出。 */
+  takeCrash?: () => Promise<CrashReportsPayload>
   /** 確認已寫入的 crash 紀錄 id（殼據此刪除）；失敗請丟出。 */
   ackCrash?: (ids: string[]) => Promise<unknown>
   /** 把未捕捉錯誤轉給殼的 reporter；實作須自行吞掉失敗。 */
@@ -72,6 +74,11 @@ export interface ConsoleLogDeps {
   /** 監聽 `error`／`unhandledrejection` 的對象（通常是 `window`）；省略則不捕捉。 */
   errorTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
 }
+
+/** 殼一次回給 `crash_take` 的上限；回滿代表可能還有，需再取一次。 */
+const CRASH_BATCH = 50
+/** 一次拉取最多連續取幾輪，避免寫入持續失敗時無窮迴圈。 */
+const MAX_PULL_ROUNDS = 5
 
 /** 單筆訊息上限（字元），超過則截斷。 */
 const MAX_MESSAGE_LENGTH = 64 * 1024
@@ -238,25 +245,59 @@ export const installConsoleLogWith = (deps: ConsoleLogDeps, options: ConsoleLogO
   target.to = to
 
   // 殼交來的 crash 紀錄：寫入成功的才 ack；檔案功能關閉或不在殼內時全數保留在殼端。
-  const handleCrashReports = (payload: CrashReportsPayload): void => {
+  // 同一 id 在寫入進行中（尚未 ack）不重複寫入。回傳本次寫入成功的筆數。
+  const writingCrash = new Set<string>()
+  const handleCrashReports = async (payload: CrashReportsPayload): Promise<number> => {
     if (!fileEnabled || !deps.canWrite() || !deps.ackCrash) {
-      return
+      return 0
     }
     const ackCrash = deps.ackCrash
-    const jobs = payload.reports.map(async (crash) => {
-      const logTarget = resolveTarget(options.crashTarget ?? defaultSource, LogLevel.Error, 'error')
-      return await submit(LogLevel.Error, formatCrashLine(crash), logTarget) ? crash.id : undefined
-    })
-    void Promise.all(jobs)
-      .then(async (ids) => {
-        const written = ids.filter((id): id is string => id !== undefined)
-        if (written.length > 0) {
-          await ackCrash(written)
-        }
-      })
-      .catch(() => {})
+    const fresh = payload.reports.filter(crash => !writingCrash.has(crash.id))
+    for (const crash of fresh) {
+      writingCrash.add(crash.id)
+    }
+    try {
+      const ids = await Promise.all(fresh.map(async (crash) => {
+        const logTarget = resolveTarget(options.crashTarget ?? defaultSource, LogLevel.Error, 'error')
+        return await submit(LogLevel.Error, formatCrashLine(crash), logTarget) ? crash.id : undefined
+      }))
+      const written = ids.filter((id): id is string => id !== undefined)
+      if (written.length > 0) {
+        await ackCrash(written)
+      }
+      return written.length
+    }
+    catch {
+      return 0
+    }
+    finally {
+      for (const crash of fresh) {
+        writingCrash.delete(crash.id)
+      }
+    }
   }
-  const offCrashReports = deps.onCrashReports?.(handleCrashReports)
+  // 先訂閱事件、再拉取：殼在 crash_take 之後才開始推送，這個順序不會漏掉拉取之後發生的錯誤。
+  const offCrashReports = deps.onCrashReports?.((payload) => {
+    void handleCrashReports(payload)
+  })
+  const pullCrashReports = async (): Promise<void> => {
+    if (!deps.takeCrash || !fileEnabled || !deps.canWrite()) {
+      return
+    }
+    try {
+      for (let round = 0; round < MAX_PULL_ROUNDS; round++) {
+        const payload = await deps.takeCrash()
+        const written = await handleCrashReports(payload)
+        if (payload.reports.length < CRASH_BATCH || written === 0) {
+          return
+        }
+      }
+    }
+    catch {
+      // 舊殼沒有 crash_take：紀錄留在殼端，不影響其他功能。
+    }
+  }
+  void pullCrashReports()
 
   // 未捕捉錯誤：走（已攔截的）console.error，讓 devtools／檔案設定一致，再轉給殼的 reporter。
   const surfaceUncaught = (reason: unknown): void => {

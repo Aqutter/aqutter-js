@@ -299,6 +299,7 @@ export const installConsoleLog = (options?: ConsoleLogOptions): (() => void) => 
     canWrite: isFlutter,
     send: (level, message, target) => callFlutter(BridgeHandler.LogAppend, { level, message, target }),
     onCrashReports: listener => onFlutterEvent(BridgeEvent.CrashReports, listener),
+    takeCrash: () => callFlutter(BridgeHandler.CrashTake),
     ackCrash: ids => callFlutter(BridgeHandler.CrashAck, { ids }),
     reportError: (report) => {
       if (isFlutter()) {

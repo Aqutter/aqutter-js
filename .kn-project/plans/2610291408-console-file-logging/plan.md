@@ -122,6 +122,7 @@
 - **[Q1]** 直接 main、不建 issue — 理由：符合 project.md；使用者於核准閘選定。
 - **[契約]** rev 1 凍結（2026-10-29）。
 - **[完成後]** 只 commit（不 push、不 PR、不歸檔）— 理由：核准閘選項為直接 main、不開 PR；push 待使用者另行要求。
+- **[Iteration／換日驗證]** 使用者要求確保換日有效（2026-10-29 核准）：`aqutter` 的 `LogService` 加可注入時鐘（預設行為不變）並補跨午夜測試；`aqutter-js` 補假時鐘跨午夜測試；實機以「每分鐘換檔名」的函式 target 驗證每筆求值。契約不動。
 - **[執行模式]** 序列（依據：三 repo 相依成一條線，且無法確認可派出獨立子 agent）。
 
 - **[契約]** rev 2 凍結（2026-10-29）：TargetSource 函式、setConsoleLogTarget、log_target_error；函式丟例外改走預設位置並提示一次（使用者核准）。

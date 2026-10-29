@@ -559,3 +559,168 @@ describe('crash 紀錄寫入與確認', () => {
     expect(hasCrashListener()).toBe(false)
   })
 })
+
+describe('crash_take：安裝時拉取', () => {
+  const take = (batches: CrashReportPayload[][]) => {
+    const calls = { count: 0 }
+    return {
+      calls,
+      takeCrash: async (): Promise<CrashReportsPayload> => {
+        const reports = batches[calls.count] ?? []
+        calls.count += 1
+        return { reports }
+      },
+    }
+  }
+
+  it('安裝時取回未確認的紀錄、寫入並 ack', async () => {
+    const { calls, takeCrash } = take([[crash({ id: 'a' }), crash({ id: 'b' })]])
+    const { sent, acked, deps } = setupErrors({ takeCrash })
+    uninstall = installConsoleLogWith(deps)
+    await flush()
+
+    expect(calls.count).toBe(1)
+    expect(sent.map(s => s.message.split(' ')[1])).toEqual(['a', 'b'])
+    expect(acked).toEqual([['a', 'b']])
+  })
+
+  it('回滿 50 筆就再取一次，直到不滿', async () => {
+    const full = Array.from({ length: 50 }, (_, i) => crash({ id: `f${i}` }))
+    const { calls, takeCrash } = take([full, [crash({ id: 'last' })]])
+    const { acked, deps } = setupErrors({ takeCrash })
+    uninstall = installConsoleLogWith(deps)
+    await flush()
+
+    expect(calls.count).toBe(2)
+    expect(acked.flat()).toHaveLength(51)
+  })
+
+  it('一筆都寫不進去就不再重取（避免無窮迴圈）', async () => {
+    const full = Array.from({ length: 50 }, (_, i) => crash({ id: `f${i}` }))
+    const { calls, takeCrash } = take([full, full, full, full, full, full])
+    const { acked, deps } = setupErrors({
+      takeCrash,
+      send: async () => {
+        throw new Error('log_provider_unavailable: x')
+      },
+    })
+    uninstall = installConsoleLogWith(deps, { devtools: false })
+    await flush()
+
+    expect(calls.count).toBe(1)
+    expect(acked).toEqual([])
+  })
+
+  it('舊殼沒有 crash_take（丟出）時靜默略過，其他功能照常', async () => {
+    const { sent, deps } = setupErrors({
+      takeCrash: async () => {
+        throw new Error('no handler')
+      },
+    })
+    uninstall = installConsoleLogWith(deps)
+    deps.console.log('still works')
+    await flush()
+
+    expect(sent.map(s => s.message)).toEqual(['still works'])
+  })
+
+  it('file: false 或不在殼內時不呼叫 crash_take（殼不會開始推送，紀錄留在殼端）', async () => {
+    const off = take([[crash()]])
+    const a = setupErrors({ takeCrash: off.takeCrash })
+    uninstall = installConsoleLogWith(a.deps, { file: false })
+    await flush()
+    expect(off.calls.count).toBe(0)
+    uninstall()
+
+    const outside = take([[crash()]])
+    const b = setupErrors({ takeCrash: outside.takeCrash, canWrite: () => false })
+    uninstall = installConsoleLogWith(b.deps)
+    await flush()
+    expect(outside.calls.count).toBe(0)
+  })
+
+  it('拉取與事件同時送來同一 id 時，寫入進行中不重複寫', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const written: Sent[] = []
+    const { deliver, deps } = setupErrors({
+      takeCrash: async () => ({ reports: [crash({ id: 'dup' })] }),
+      send: async (level, message, target) => {
+        await gate
+        written.push({ level, message, target })
+      },
+    })
+    uninstall = installConsoleLogWith(deps)
+    await flush()
+    deliver(crash({ id: 'dup' }))
+    release?.()
+    await flush()
+
+    expect(written).toHaveLength(1)
+  })
+})
+
+describe('換日', () => {
+  const day = (d: Date): string => d.toISOString().slice(0, 10)
+
+  it('省略 name 時 JS 不凍結檔名：跨午夜前後都不帶 name（日期由殼在寫入當下決定）', async () => {
+    vi.useFakeTimers()
+    try {
+      const { sent, deps } = setup()
+      uninstall = installConsoleLogWith(deps, { target: { dir: 'daily' } })
+
+      vi.setSystemTime(new Date('2026-10-29T23:59:59Z'))
+      deps.console.log('before')
+      vi.setSystemTime(new Date('2026-10-30T00:00:01Z'))
+      deps.console.log('after')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(sent.map(s => s.target)).toEqual([{ dir: 'daily' }, { dir: 'daily' }])
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('crash 紀錄用函式 crashTarget 時，以「交付當下」的時間求值', async () => {
+    vi.useFakeTimers()
+    try {
+      const { sent, deliver, deps } = setupErrors()
+      uninstall = installConsoleLogWith(deps, {
+        crashTarget: ({ time }) => ({ dir: 'crash', name: day(time) }),
+      })
+
+      vi.setSystemTime(new Date('2026-10-30T00:10:00Z'))
+      deliver(crash({ time: '2026-10-29T23:50:00.000Z' }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(sent[0]?.target).toEqual({ dir: 'crash', name: '2026-10-30' })
+      expect(sent[0]?.message).toContain('2026-10-29T23:50:00.000Z')
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('函式 target 在跨午夜時逐筆換檔，且 console.to 同樣適用', async () => {
+    vi.useFakeTimers()
+    try {
+      const { sent, deps } = setup()
+      uninstall = installConsoleLogWith(deps)
+      const target = ({ time }: { time: Date }) => ({ name: day(time) })
+
+      vi.setSystemTime(new Date('2026-10-29T23:59:59Z'))
+      deps.console.to.info(target, 'a')
+      vi.setSystemTime(new Date('2026-10-30T00:00:00Z'))
+      deps.console.to.info(target, 'b')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(sent.map(s => s.target)).toEqual([{ name: '2026-10-29' }, { name: '2026-10-30' }])
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+})

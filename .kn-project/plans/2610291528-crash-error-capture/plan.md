@@ -22,12 +22,13 @@
 - **跨 repo 檔案指涉**: 無。
 
 ## Contract / 介面契約
-- **契約正本 repo**: `aqutter-js`　**修訂號**: `rev 1`　**狀態**: `凍結（核准日 2026-10-29）`
+- **契約正本 repo**: `aqutter-js`　**修訂號**: `rev 2`　**狀態**: `凍結（核准日 2026-10-29）`
 
 ### 1. 介面
 | # | 方向 | 名稱 | 說明 |
 |---|---|---|---|
-| 1 | 殼→JS 事件 | `crash_reports`（`BridgeEvent.CrashReports`） | 殼把 spool 中尚未確認的錯誤紀錄送給 JS，於 `app_ready` 之後、以及之後每次有新紀錄時送出 |
+| 1 | 殼→JS 事件 | `crash_reports`（`BridgeEvent.CrashReports`） | **rev 2**：只在 JS 呼叫過 `crash_take` 之後，殼每記下一筆新的 Dart 錯誤就送出該筆（`reports` 只含這一筆）；不再與 `app_ready` 掛鉤 |
+| 5 | JS→殼 handler | `crash_take`（`BridgeHandler.CrashTake`，rev 2） | JS 於 `installConsoleLog` 時呼叫，殼回傳目前所有未確認的紀錄（最多 50 筆、由舊到新），並把「JS 已可接收」記下，之後的新紀錄才以事件推送 |
 | 2 | JS→殼 handler | `crash_ack`（`BridgeHandler.CrashAck`） | JS 已把紀錄寫入目標檔案後確認，殼刪除對應 spool |
 | 3 | JS→殼 handler | `error_report`（`BridgeHandler.ErrorReport`） | JS 未捕捉錯誤轉給殼的 reporter（預留 Crashlytics 等）；**不**進 spool、不寫檔（JS 已自行寫檔） |
 | 4 | JS API | `installConsoleLog` 新選項 `errors`、`crashTarget` | 見下 |
@@ -44,7 +45,9 @@
 | `stack` | `string` | 否 | ≤ 32 KiB，超過截斷 |
 | `extra` | `Record<string,string>` | 否 | 附加資訊（如 library、context），值皆字串 |
 
-事件 payload：`{ reports: CrashReportPayload[] }`（一次最多 50 筆，依 `time` 由舊到新）。
+事件 payload：`{ reports: CrashReportPayload[] }`（rev 2：每次一筆）。
+
+**`crash_take` 請求**：`{}`；回應 `{ reports: CrashReportPayload[] }`（最多 50 筆，依 `time` 由舊到新；空陣列代表沒有）。JS 寫入並 `crash_ack` 後，若回傳筆數等於 50 就再呼叫一次，直到小於 50。
 
 **`crash_ack` 請求**：`{ ids: string[] }`；回應 `{ ok: true }`。未知 id 忽略。
 **`error_report` 請求**：`{ message: string, stack?: string, fatal: boolean }`；回應 `{ ok: true }`。
@@ -66,17 +69,18 @@
 
 ### 4. 狀態與規則
 - spool：`{getApplicationSupportDirectory}/crash_pending/{id}.json`，上限 50 筆，超過時丟棄最舊；殼啟動時不清空（跨重啟保留）。
-- 殼端 Dart 錯誤一律先寫 spool（耐久），再通知已註冊的 `AqutterErrorReporter`；網頁已就緒（曾收到 `app_ready`）時立刻送 `crash_reports`，否則等 `app_ready`。每次 `app_ready` 都重送所有未 ack 的紀錄。
+- 殼端 Dart 錯誤一律先寫 spool（耐久），再通知已註冊的 `AqutterErrorReporter`；JS 呼叫過 `crash_take` 後，每筆新紀錄立刻以 `crash_reports` 事件送出（一次一筆）。網頁重新載入後 JS 會再次 `crash_take`，取回所有未 ack 的紀錄，因此事件在連線中斷時被丟棄也不會遺失。
+- JS 對同一個 `id` 在寫入進行中（尚未 ack）不重複寫入（記憶體內去重）；跨頁面載入的重送允許重複，行內含 `id` 供辨識。
 - `AqutterErrorReporter` 接口（Dart，殼對外公開）：`void report(AqutterErrorReport report)`；殼對 reporter 的呼叫以 try/catch 包住，reporter 丟例外不影響其他 reporter 或殼。JS 來源（`error_report`）也會派給 reporter，其 `source` 為 `web`（僅 Dart 端 reporter 看得到，不在線上格式的 `CrashReportPayload.source` 內）。
-- 前提：網頁須在 `app_ready` 之前呼叫 `installConsoleLog`（範例 App 的 plugin 早於 `app.vue` 的 `onMounted`，成立）。
+- rev 2 移除原本「須在 `app_ready` 之前安裝」的前提：交付由 JS 的 `crash_take` 觸發，與 `app_ready` 無關。
 
 ### 5. 相容性
-- 舊 JS 不處理 `crash_reports` 事件：紀錄留在 spool、不會遺失，也不影響頁面。
-- 舊殼沒有 `crash_ack`／`error_report` handler：新 JS 呼叫失敗被吞掉，`installConsoleLog` 其餘功能不變。
+- 舊 JS 不呼叫 `crash_take`：殼不會送事件，紀錄留在 spool、不會遺失，也不影響頁面。
+- 舊殼沒有 `crash_take`／`crash_ack`／`error_report` handler：新 JS 呼叫失敗被吞掉，`installConsoleLog` 其餘功能不變。
 - 新增事件與 handler 為純新增。
 
 ### 6. 變更紀錄
-- _(尚無)_
+- 2026-10-29 rev 2：新增 `crash_take`；`crash_reports` 事件改為「`crash_take` 之後才推、一次一筆」，不再與 `app_ready` 掛鉤。原因：簡化殼的就緒追蹤與送出邏輯、移除安裝順序前提。影響：`aqutter-js`、`aqutter`；線上其他格式不變。
 
 ## Impact Files
 - `src/contract/bridge.ts:170` (`BridgeEvent`) — 新增 `CrashReports`；`:45` (`BridgeHandler.LogAppend` 附近) 新增 `CrashAck`、`ErrorReport`；新增 `CrashReportPayload`、`CrashAckRequest`、`ErrorReportRequest`、`CrashSource`
@@ -112,5 +116,6 @@
 - 上一個計畫：`2610291408-console-file-logging`（`installConsoleLog`、`target`）。
 - **[Q1]** 直接 main、不建 issue — 理由：符合 project.md；使用者於核准閘選定。
 - **[契約]** rev 1 凍結（2026-10-29）。
+- **[契約]** rev 2 凍結（2026-10-29，使用者核准）：JS 於安裝時 `crash_take` 拉取、之後事件推送；移除 `app_ready` 掛鉤（Rule 29）。
 - **[完成後]** 只 commit（不 push、不 PR、不歸檔）。
 - **[執行模式]** 序列（依據：aqutter 依賴 aqutter-js 的契約型別，相依成一條線）。
