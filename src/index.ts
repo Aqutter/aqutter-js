@@ -1,6 +1,8 @@
 import { BridgeHandler } from './contract/bridge'
 import type { BridgeEvent } from './contract/bridge'
 import type { BridgeContract, BridgeEventContract, PayloadArgs } from './contract/table'
+import { installConsoleLogWith } from './console'
+import type { ConsoleLogOptions } from './console'
 import { getEndpoint, hasEndpoint } from './endpoint'
 import { AqutterPluginError } from './error'
 import { Transport } from './transport'
@@ -8,6 +10,8 @@ import type { TransportState } from './transport'
 
 export { AqutterPluginError } from './error'
 export type { TransportState } from './transport'
+export { isConsoleLogInstalled } from './console'
+export type { ConsoleLogOptions, ConsoleMethod, ConsoleTo } from './console'
 
 /**
  * Flutter 橋接底層：runtime 偵測、JS→原生 handler 呼叫、原生→JS 事件頻道。
@@ -277,6 +281,25 @@ export const isPluginSupported = (pluginId: string, method: string): boolean => 
     return false
   }
   return capabilities === null || capabilities.has(pluginHandlerName(pluginId, method))
+}
+
+/**
+ * 攔截 `console.debug/log/info/warn/error` 並新增 `console.to.<level>(target, ...args)`。
+ *
+ * 輸出可分別送到 devtools（`devtools`）與經 bridge 寫檔（`file`）；release 版建議 `devtools: false`。
+ * 檔案位置由 {@link LogTarget} 決定（provider／dir／name）。SSR 下為 no-op；非 Flutter 環境只做 devtools 輸出。
+ *
+ * @returns 還原原生 console 的函式
+ */
+export const installConsoleLog = (options?: ConsoleLogOptions): (() => void) => {
+  if (isServer()) {
+    return () => {}
+  }
+  return installConsoleLogWith({
+    console,
+    canWrite: isFlutter,
+    send: (level, message, target) => callFlutter(BridgeHandler.LogAppend, { level, message, target }),
+  }, options)
 }
 
 export * from './nativeview'

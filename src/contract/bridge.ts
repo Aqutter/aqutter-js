@@ -137,6 +137,35 @@ export enum LogLevel {
   Error = 'error',
 }
 
+/** log 檔的根目錄來源；各值對應殼端 path_provider 的目錄。 */
+export enum LogProvider {
+  /** App 內部支援目錄（預設，`getApplicationSupportDirectory`）。 */
+  Internal = 'internal',
+  /** 文件目錄（`getApplicationDocumentsDirectory`）。 */
+  Documents = 'documents',
+  /** 快取目錄（`getApplicationCacheDirectory`）。 */
+  Cache = 'cache',
+  /** 暫存目錄（`getTemporaryDirectory`）。 */
+  Temp = 'temp',
+  /** App 專屬外部目錄（`getExternalStorageDirectory`；僅 Android，不需權限）。 */
+  External = 'external',
+}
+
+/**
+ * log 寫入目標。實際檔案為 `{provider 根目錄}/{dir}/{name}_{yyyyMMdd}.log`。
+ *
+ * `dir` 為以 `/` 分段的相對路徑（每段 `[A-Za-z0-9._-]+`，不得為 `.`／`..`，最多 8 段、總長 ≤ 128）；
+ * `name` 為 `[A-Za-z0-9._-]{1,64}`。不合法或 provider 在本平台不可用時，殼端拒絕該筆。
+ */
+export interface LogTarget {
+  /** 預設 {@link LogProvider.Internal}。 */
+  provider?: LogProvider
+  /** 預設 `logs`。 */
+  dir?: string
+  /** 預設為目前的 log key（`log_set_key`，預設 `app`）。 */
+  name?: string
+}
+
 /** 原生→JS：經多工連線以 `evt` 訊框派送的事件頻道名稱。 */
 export enum BridgeEvent {
   /** 電量狀態更新。 */
@@ -228,6 +257,8 @@ export interface LogDirResponse {
 export interface LogAppendRequest {
   level: LogLevel
   message: string
+  /** 省略時寫入預設位置（`internal` 的 `logs/`，檔名 key 為目前設定值）。 */
+  target?: LogTarget
 }
 
 /** 設定 log 檔名 key。 */
