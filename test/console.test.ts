@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { formatConsoleArgs, installConsoleLogWith, isConsoleLogInstalled, setConsoleLogTarget } from '../src/console'
+import { formatConsoleArgs, formatCrashLine, installConsoleLogWith, isConsoleLogInstalled, setConsoleLogTarget } from '../src/console'
 import type { ConsoleLogDeps } from '../src/console'
 import { LogLevel, LogProvider } from '../src/contract/bridge'
-import type { LogTarget } from '../src/contract/bridge'
+import type { CrashReportPayload, CrashReportsPayload, ErrorReportRequest, LogTarget } from '../src/contract/bridge'
 
 interface Sent {
   level: LogLevel
@@ -368,5 +368,194 @@ describe('formatConsoleArgs', () => {
 
   it('undefined 與 symbol 退回 String()', () => {
     expect(formatConsoleArgs([undefined, Symbol('s')])).toBe('undefined Symbol(s)')
+  })
+})
+
+const crash = (overrides: Partial<CrashReportPayload> = {}): CrashReportPayload => ({
+  id: '1730000000000-abc123',
+  time: '2026-10-29T07:00:00.000Z',
+  source: 'platform',
+  fatal: true,
+  message: 'boom',
+  ...overrides,
+})
+
+const setupErrors = (overrides: Partial<ConsoleLogDeps> = {}) => {
+  const listeners = new Map<string, (event: Event) => void>()
+  const errorTarget = {
+    addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+      listeners.set(type, listener as (event: Event) => void)
+    },
+    removeEventListener: (type: string) => {
+      listeners.delete(type)
+    },
+  }
+  let crashListener: ((payload: CrashReportsPayload) => void) | undefined
+  const acked: string[][] = []
+  const reported: ErrorReportRequest[] = []
+  const base = setup({
+    errorTarget,
+    onCrashReports: (listener) => {
+      crashListener = listener
+      return () => {
+        crashListener = undefined
+      }
+    },
+    ackCrash: async (ids) => {
+      acked.push(ids)
+    },
+    reportError: (report) => {
+      reported.push(report)
+    },
+    ...overrides,
+  })
+  return {
+    ...base,
+    listeners,
+    acked,
+    reported,
+    deliver: (...reports: CrashReportPayload[]) => crashListener?.({ reports }),
+    hasCrashListener: () => crashListener !== undefined,
+  }
+}
+
+describe('formatCrashLine', () => {
+  it('含來源、fatal、id、時間與訊息；有 stack 時以 | 接上並轉義換行', () => {
+    expect(formatCrashLine(crash())).toBe('[crash:platform:fatal] 1730000000000-abc123 2026-10-29T07:00:00.000Z boom')
+    expect(formatCrashLine(crash({ source: 'flutter', fatal: false, stack: 'a\nb' })))
+      .toBe('[crash:flutter] 1730000000000-abc123 2026-10-29T07:00:00.000Z boom | a\\nb')
+  })
+})
+
+describe('未捕捉錯誤', () => {
+  it('error 事件轉成 console.error 並轉給殼 reporter', async () => {
+    const { sent, listeners, reported, deps } = setupErrors()
+    uninstall = installConsoleLogWith(deps)
+    const error = new Error('oops')
+
+    listeners.get('error')?.({ error, message: 'oops' } as unknown as Event)
+    await flush()
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.level).toBe(LogLevel.Error)
+    expect(sent[0]?.message).toContain('[uncaught]')
+    expect(reported).toEqual([{ message: 'oops', stack: error.stack, fatal: false }])
+  })
+
+  it('unhandledrejection 以 reason 處理，非 Error 也不丟出', async () => {
+    const { sent, listeners, reported, deps } = setupErrors()
+    uninstall = installConsoleLogWith(deps)
+
+    listeners.get('unhandledrejection')?.({ reason: { code: 7 } } as unknown as Event)
+    await flush()
+
+    expect(sent[0]?.message).toBe('[uncaught] {"code":7}')
+    expect(reported).toEqual([{ message: '{"code":7}', stack: undefined, fatal: false }])
+  })
+
+  it('errors: false 不監聽；uninstall 會移除監聽', () => {
+    const off = setupErrors()
+    uninstall = installConsoleLogWith(off.deps, { errors: false })
+    expect(off.listeners.size).toBe(0)
+    uninstall()
+
+    const on = setupErrors()
+    uninstall = installConsoleLogWith(on.deps)
+    expect(on.listeners.size).toBe(2)
+    uninstall()
+    expect(on.listeners.size).toBe(0)
+  })
+
+  it('devtools: false 時不呼叫原生 console，但仍寫檔並轉給 reporter', async () => {
+    const { sent, fake, listeners, reported, deps } = setupErrors()
+    const original = fake.error
+    uninstall = installConsoleLogWith(deps, { devtools: false })
+
+    listeners.get('error')?.({ message: 'x' } as unknown as Event)
+    await flush()
+
+    expect(original).not.toHaveBeenCalled()
+    expect(sent).toHaveLength(1)
+    expect(reported).toHaveLength(1)
+  })
+})
+
+describe('crash 紀錄寫入與確認', () => {
+  it('寫成單行 error 並在全部成功後 ack', async () => {
+    const { sent, acked, deliver, deps } = setupErrors()
+    uninstall = installConsoleLogWith(deps)
+
+    deliver(crash({ id: 'a' }), crash({ id: 'b', source: 'flutter', fatal: false }))
+    await flush()
+
+    expect(sent.map(s => s.level)).toEqual([LogLevel.Error, LogLevel.Error])
+    expect(sent[0]?.message).toContain('[crash:platform:fatal] a ')
+    expect(sent[1]?.message).toContain('[crash:flutter] b ')
+    expect(acked).toEqual([['a', 'b']])
+  })
+
+  it('crashTarget（含函式）優先，否則沿用 target', async () => {
+    const { sent, deliver, deps } = setupErrors()
+    uninstall = installConsoleLogWith(deps, {
+      target: { name: 'app' },
+      crashTarget: ({ level }) => ({ dir: 'crash', name: level }),
+    })
+    deliver(crash())
+    await flush()
+    expect(sent[0]?.target).toEqual({ dir: 'crash', name: 'error' })
+
+    uninstall()
+    const second = setupErrors()
+    uninstall = installConsoleLogWith(second.deps, { target: { name: 'app' } })
+    second.deliver(crash())
+    await flush()
+    expect(second.sent[0]?.target).toEqual({ name: 'app' })
+  })
+
+  it('寫入失敗的不 ack，成功的照常 ack', async () => {
+    let calls = 0
+    const { acked, deliver, deps } = setupErrors({
+      send: async () => {
+        calls += 1
+        if (calls === 1) {
+          throw new Error('log_provider_unavailable: x')
+        }
+      },
+    })
+    uninstall = installConsoleLogWith(deps, { devtools: false })
+
+    deliver(crash({ id: 'bad' }), crash({ id: 'good' }))
+    await flush()
+
+    expect(acked).toEqual([['good']])
+  })
+
+  it('file: false 或不在殼內時不寫也不 ack（紀錄留在殼端）', async () => {
+    const off = setupErrors()
+    uninstall = installConsoleLogWith(off.deps, { file: false })
+    off.deliver(crash())
+    await flush()
+    expect(off.sent).toEqual([])
+    expect(off.acked).toEqual([])
+    uninstall()
+
+    const outside = setupErrors({ canWrite: () => false })
+    uninstall = installConsoleLogWith(outside.deps)
+    outside.deliver(crash())
+    await flush()
+    expect(outside.acked).toEqual([])
+  })
+
+  it('ack 失敗不丟出；uninstall 後取消訂閱', async () => {
+    const { deliver, hasCrashListener, deps } = setupErrors({
+      ackCrash: async () => {
+        throw new Error('no handler')
+      },
+    })
+    const off = installConsoleLogWith(deps)
+    expect(() => deliver(crash())).not.toThrow()
+    await flush()
+    off()
+    expect(hasCrashListener()).toBe(false)
   })
 })

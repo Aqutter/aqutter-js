@@ -45,6 +45,10 @@ export enum BridgeHandler {
   LogAppend = 'log_append',
   /** 設定 log 檔名 key；檔名為 `{key}_{本地日期}.log`，可執行中變更。 */
   LogSetKey = 'log_set_key',
+  /** 確認已把 crash 紀錄寫入目標檔案；殼據此刪除對應的待送紀錄。 */
+  CrashAck = 'crash_ack',
+  /** 回報網頁的未捕捉錯誤，供殼的 AqutterErrorReporter 使用（不寫檔）。 */
+  ErrorReport = 'error_report',
 
   /** 取得裝置唯一 ID。 */
   DeviceId = 'device_id',
@@ -185,6 +189,11 @@ export enum BridgeEvent {
   DownloadProgress = 'download_progress',
   /** 更新流程（網頁包／殼）的每個狀態，payload 為 {@link UpdateStatePayload}。 */
   UpdateState = 'update_state',
+  /**
+   * 殼端尚未被確認的 crash／錯誤紀錄，payload 為 {@link CrashReportsPayload}。
+   * 於 `app_ready` 之後送出，之後每次有新紀錄也會送；JS 寫入目標檔案後以 {@link BridgeHandler.CrashAck} 確認。
+   */
+  CrashReports = 'crash_reports',
 }
 
 /**
@@ -264,6 +273,39 @@ export interface LogAppendRequest {
 /** 設定 log 檔名 key。 */
 export interface LogSetKeyRequest {
   key: string
+}
+
+/** crash 紀錄來源：`flutter`＝FlutterError.onError、`platform`＝PlatformDispatcher.onError、`native`＝保留給原生層。 */
+export type CrashSource = 'flutter' | 'platform' | 'native'
+
+/** 殼端保存的一筆 crash／錯誤紀錄。 */
+export interface CrashReportPayload {
+  /** 唯一 id（`{epochMs}-{6 碼 hex}`）。 */
+  id: string
+  /** 發生當下，ISO 8601 UTC。 */
+  time: string
+  source: CrashSource
+  fatal: boolean
+  message: string
+  stack?: string
+  extra?: Record<string, string>
+}
+
+/** {@link BridgeEvent.CrashReports} 的 payload（一次最多 50 筆，依 time 由舊到新）。 */
+export interface CrashReportsPayload {
+  reports: CrashReportPayload[]
+}
+
+/** 確認已寫入的 crash 紀錄 id。 */
+export interface CrashAckRequest {
+  ids: string[]
+}
+
+/** 網頁未捕捉錯誤，轉給殼的 reporter。 */
+export interface ErrorReportRequest {
+  message: string
+  stack?: string
+  fatal: boolean
 }
 
 /** 系統語系（BCP-47）。 */

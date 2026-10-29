@@ -1,5 +1,4 @@
-import { BridgeHandler } from './contract/bridge'
-import type { BridgeEvent } from './contract/bridge'
+import { BridgeEvent, BridgeHandler } from './contract/bridge'
 import type { BridgeContract, BridgeEventContract, PayloadArgs } from './contract/table'
 import { installConsoleLogWith } from './console'
 import type { ConsoleLogOptions } from './console'
@@ -299,6 +298,14 @@ export const installConsoleLog = (options?: ConsoleLogOptions): (() => void) => 
     console,
     canWrite: isFlutter,
     send: (level, message, target) => callFlutter(BridgeHandler.LogAppend, { level, message, target }),
+    onCrashReports: listener => onFlutterEvent(BridgeEvent.CrashReports, listener),
+    ackCrash: ids => callFlutter(BridgeHandler.CrashAck, { ids }),
+    reportError: (report) => {
+      if (isFlutter()) {
+        callFlutter(BridgeHandler.ErrorReport, report).catch(() => {})
+      }
+    },
+    errorTarget: window,
   }, options)
 }
 

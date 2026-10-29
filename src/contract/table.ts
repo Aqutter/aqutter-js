@@ -31,9 +31,12 @@ import type {
   BundleCheckResult,
   BundleDownloadRequest,
   BundleInfo,
+  CrashAckRequest,
+  CrashReportsPayload,
   DownloadProgressPayload,
   DownloadRequest,
   DownloadResponse,
+  ErrorReportRequest,
   HardwareKeyPayload,
   HostDownloadRequest,
   HttpAbortRequest,
@@ -115,6 +118,8 @@ export type BridgeContract = {
   [BridgeHandler.LogDir]: { req: NoPayload, res: LogDirResponse }
   [BridgeHandler.LogAppend]: { req: LogAppendRequest, res: OkResponse }
   [BridgeHandler.LogSetKey]: { req: LogSetKeyRequest, res: OkResponse }
+  [BridgeHandler.CrashAck]: { req: CrashAckRequest, res: OkResponse }
+  [BridgeHandler.ErrorReport]: { req: ErrorReportRequest, res: OkResponse }
 
   [BridgeHandler.DeviceId]: { req: NoPayload, res: DeviceId }
   [BridgeHandler.DeviceInfo]: { req: NoPayload, res: DeviceInfo }
@@ -190,6 +195,7 @@ export type BridgeEventContract = {
   [BridgeEvent.HardwareKey]: HardwareKeyPayload
   [BridgeEvent.DownloadProgress]: DownloadProgressPayload
   [BridgeEvent.UpdateState]: UpdateStatePayload
+  [BridgeEvent.CrashReports]: CrashReportsPayload
 }
 
 /**
