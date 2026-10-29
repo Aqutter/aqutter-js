@@ -175,6 +175,25 @@ describe('installConsoleLogWith', () => {
   })
 })
 
+describe('錯誤代碼辨識', () => {
+  it('殼的訊息即使被前綴包裝（如 "Exception: "）仍辨識出代碼', async () => {
+    const { fake, deps } = setup({
+      send: async () => {
+        throw new Error('Exception: log_invalid_target: dir 含不合法的段')
+      },
+    })
+    const warn = fake.warn
+    uninstall = installConsoleLogWith(deps, { devtools: false })
+
+    deps.console.to.log({ dir: '..' }, 'x')
+    deps.console.to.log({ dir: '..' }, 'y')
+    await flush()
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('（log_invalid_target）')
+  })
+})
+
 describe('console.to', () => {
   it('物件目標原樣傳給 send，並對應各層級', async () => {
     const { sent, deps } = setup()

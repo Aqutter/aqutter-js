@@ -101,7 +101,7 @@ export const formatConsoleArgs = (args: readonly unknown[]): string => {
 
 const errorCodeOf = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error)
-  return KNOWN_ERROR_CODES.find(code => message.startsWith(code)) ?? 'log_error'
+  return KNOWN_ERROR_CODES.find(code => message.includes(code)) ?? 'log_error'
 }
 
 let uninstallActive: (() => void) | undefined
