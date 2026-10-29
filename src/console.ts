@@ -11,8 +11,23 @@ import type { LogTarget } from './contract/bridge'
 /** 被攔截、也提供 `console.to.*` 版本的 console 方法。 */
 export type ConsoleMethod = 'debug' | 'log' | 'info' | 'warn' | 'error'
 
+/** 傳給 {@link TargetSource} 函式的呼叫資訊。 */
+export interface ConsoleLogCall {
+  level: LogLevel
+  method: ConsoleMethod
+  /** 這筆 log 被呼叫的當下時間。 */
+  time: Date
+}
+
+/**
+ * 寫入目標的來源：固定物件，或在**每一筆 log 呼叫當下**同步求值的函式。
+ * 函式可依當下時間／狀態決定 provider、dir、name（例如換日換檔名）；回傳 `undefined` 表示走殼的預設位置。
+ * 函式必須同步，且不得呼叫 `console.*`（會遞迴）。
+ */
+export type TargetSource = LogTarget | ((call: ConsoleLogCall) => LogTarget | undefined)
+
 /** `console.to.<method>(target, ...args)`：target 為字串時等同 `{ name: 字串 }`。 */
-export type ConsoleTo = Record<ConsoleMethod, (target: LogTarget | string, ...args: unknown[]) => void>
+export type ConsoleTo = Record<ConsoleMethod, (target: TargetSource | string, ...args: unknown[]) => void>
 
 declare global {
   interface Console {
@@ -30,8 +45,8 @@ export interface ConsoleLogOptions {
   devtools?: boolean
   /** 是否經 bridge 寫檔。預設 `true`；可用 `minLevel` 過濾（預設 `debug`）。非 Flutter 環境一律不寫。 */
   file?: boolean | { minLevel?: LogLevel }
-  /** 一般 `console.*` 使用的目標；省略則走殼的預設位置。 */
-  target?: LogTarget
+  /** 一般 `console.*` 使用的目標（物件或函式，見 {@link TargetSource}）；省略則走殼的預設位置。可用 {@link setConsoleLogTarget} 在執行中更換。 */
+  target?: TargetSource
 }
 
 export interface ConsoleLogDeps {
@@ -105,6 +120,12 @@ const errorCodeOf = (error: unknown): string => {
 }
 
 let uninstallActive: (() => void) | undefined
+let setTargetActive: ((target: TargetSource | undefined) => void) | undefined
+
+/** 在執行中更換一般 `console.*` 的目標；尚未安裝時為 no-op。傳 `undefined` 回到殼的預設位置。 */
+export const setConsoleLogTarget = (target: TargetSource | undefined): void => {
+  setTargetActive?.(target)
+}
 
 /** 是否已安裝 console 攔截（供 App 層避免重複寫檔）。 */
 export const isConsoleLogInstalled = (): boolean => uninstallActive !== undefined
@@ -131,8 +152,8 @@ export const installConsoleLogWith = (deps: ConsoleLogDeps, options: ConsoleLogO
   const warned = new Set<string>()
 
   // 寫檔失敗不得影響呼叫端；每種錯誤代碼只提示一次，且用保存的原始 console 避免遞迴。
-  const report = (error: unknown): void => {
-    const code = errorCodeOf(error)
+  const report = (error: unknown, knownCode?: string): void => {
+    const code = knownCode ?? errorCodeOf(error)
     if (warned.has(code)) {
       return
     }
@@ -141,14 +162,29 @@ export const installConsoleLogWith = (deps: ConsoleLogDeps, options: ConsoleLogO
   }
 
   // 同一頁面內串行送出以保證順序。
-  const enqueue = (method: ConsoleMethod, args: readonly unknown[], logTarget: LogTarget | undefined): void => {
+  const enqueue = (method: ConsoleMethod, args: readonly unknown[], source: TargetSource | undefined): void => {
     const level = LEVEL_BY_METHOD[method]
     if (!fileEnabled || LEVEL_RANK[level] < minRank || !deps.canWrite()) {
       return
     }
     const message = formatConsoleArgs(args)
+    // 函式目標在此（呼叫當下、排入佇列之前）同步求值，才能反映這筆 log 發生時的時間／狀態。
+    let logTarget: LogTarget | undefined
+    if (typeof source === 'function') {
+      try {
+        logTarget = source({ level, method, time: new Date() })
+      }
+      catch (error) {
+        report(error, 'log_target_error')
+      }
+    }
+    else {
+      logTarget = source
+    }
     chain = chain.then(() => deps.send(level, message, logTarget)).catch(report)
   }
+
+  let defaultSource = options.target
 
   const original = {} as Record<ConsoleMethod, Console[ConsoleMethod]>
   const to = {} as ConsoleTo
@@ -158,7 +194,7 @@ export const installConsoleLogWith = (deps: ConsoleLogDeps, options: ConsoleLogO
       if (devtools) {
         originals[method](...args)
       }
-      enqueue(method, args, options.target)
+      enqueue(method, args, defaultSource)
     }
     to[method] = (logTarget, ...args) => {
       if (devtools) {
@@ -183,7 +219,11 @@ export const installConsoleLogWith = (deps: ConsoleLogDeps, options: ConsoleLogO
       target.to = previousTo
     }
     uninstallActive = undefined
+    setTargetActive = undefined
   }
   uninstallActive = uninstall
+  setTargetActive = (next) => {
+    defaultSource = next
+  }
   return uninstall
 }

@@ -10,8 +10,8 @@ import type { TransportState } from './transport'
 
 export { AqutterPluginError } from './error'
 export type { TransportState } from './transport'
-export { isConsoleLogInstalled } from './console'
-export type { ConsoleLogOptions, ConsoleMethod, ConsoleTo } from './console'
+export { isConsoleLogInstalled, setConsoleLogTarget } from './console'
+export type { ConsoleLogCall, ConsoleLogOptions, ConsoleMethod, ConsoleTo, TargetSource } from './console'
 
 /**
  * Flutter 橋接底層：runtime 偵測、JS→原生 handler 呼叫、原生→JS 事件頻道。

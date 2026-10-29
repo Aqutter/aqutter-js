@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { formatConsoleArgs, installConsoleLogWith, isConsoleLogInstalled } from '../src/console'
+import { formatConsoleArgs, installConsoleLogWith, isConsoleLogInstalled, setConsoleLogTarget } from '../src/console'
 import type { ConsoleLogDeps } from '../src/console'
 import { LogLevel, LogProvider } from '../src/contract/bridge'
 import type { LogTarget } from '../src/contract/bridge'
@@ -172,6 +172,116 @@ describe('installConsoleLogWith', () => {
 
     expect(warn).toHaveBeenCalledTimes(1)
     expect(String(warn.mock.calls[0]?.[0])).toContain('log_provider_unavailable')
+  })
+})
+
+describe('函式目標（TargetSource）', () => {
+  it('每筆 log 呼叫當下求值，可據以換日換檔名', async () => {
+    vi.useFakeTimers()
+    try {
+      const { sent, deps } = setup()
+      const day = (d: Date): string => d.toISOString().slice(0, 10)
+      uninstall = installConsoleLogWith(deps, {
+        target: ({ time }) => ({ dir: 'daily', name: day(time) }),
+      })
+
+      vi.setSystemTime(new Date('2026-10-29T23:59:59Z'))
+      deps.console.log('a')
+      vi.setSystemTime(new Date('2026-10-30T00:00:01Z'))
+      deps.console.log('b')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(sent.map(s => s.target)).toEqual([
+        { dir: 'daily', name: '2026-10-29' },
+        { dir: 'daily', name: '2026-10-30' },
+      ])
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('函式收到層級與方法；回傳 undefined 表示走預設位置', async () => {
+    const { sent, deps } = setup()
+    const seen: string[] = []
+    uninstall = installConsoleLogWith(deps, {
+      target: ({ level, method }) => {
+        seen.push(`${method}:${level}`)
+        return undefined
+      },
+    })
+
+    deps.console.log('x')
+    deps.console.warn('y')
+    await flush()
+
+    expect(seen).toEqual(['log:info', 'warn:warn'])
+    expect(sent.map(s => s.target)).toEqual([undefined, undefined])
+  })
+
+  it('函式丟例外：該筆改走預設位置，且 log_target_error 只提示一次', async () => {
+    const { sent, fake, deps } = setup()
+    const warn = fake.warn
+    uninstall = installConsoleLogWith(deps, {
+      devtools: false,
+      target: () => {
+        throw new Error('boom')
+      },
+    })
+
+    deps.console.log('a')
+    deps.console.log('b')
+    await flush()
+
+    expect(sent.map(s => s.message)).toEqual(['a', 'b'])
+    expect(sent.every(s => s.target === undefined)).toBe(true)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0]?.[0])).toContain('（log_target_error）')
+  })
+
+  it('被過濾或無法寫檔的呼叫不會求值函式', async () => {
+    const fn = vi.fn(() => ({ name: 'x' }))
+    const { deps } = setup({ canWrite: () => false })
+    uninstall = installConsoleLogWith(deps, { target: fn })
+
+    deps.console.log('x')
+    await flush()
+
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('console.to 的目標也可以是函式', async () => {
+    const { sent, deps } = setup()
+    uninstall = installConsoleLogWith(deps)
+
+    deps.console.to.info(({ method }) => ({ dir: 'by-method', name: method }), 'x')
+    await flush()
+
+    expect(sent[0]?.target).toEqual({ dir: 'by-method', name: 'info' })
+  })
+})
+
+describe('setConsoleLogTarget', () => {
+  it('執行中更換一般 console.* 的目標，傳 undefined 回預設', async () => {
+    const { sent, deps } = setup()
+    uninstall = installConsoleLogWith(deps, { target: { name: 'first' } })
+
+    deps.console.log('1')
+    setConsoleLogTarget({ dir: 'next', name: 'second' })
+    deps.console.log('2')
+    setConsoleLogTarget(undefined)
+    deps.console.log('3')
+    await flush()
+
+    expect(sent.map(s => s.target)).toEqual([{ name: 'first' }, { dir: 'next', name: 'second' }, undefined])
+  })
+
+  it('未安裝或已 uninstall 時為 no-op', () => {
+    expect(() => setConsoleLogTarget({ name: 'x' })).not.toThrow()
+    const { deps } = setup()
+    const off = installConsoleLogWith(deps)
+    off()
+    expect(() => setConsoleLogTarget({ name: 'x' })).not.toThrow()
   })
 })
 

@@ -27,7 +27,7 @@
 - **跨 repo 檔案指涉**: 無。
 
 ## Contract / 介面契約
-- **契約正本 repo**: `aqutter-js`　**修訂號**: `rev 1`　**狀態**: `凍結（核准日 2026-10-29）`
+- **契約正本 repo**: `aqutter-js`　**修訂號**: `rev 2`　**狀態**: `凍結（rev 2 核准日 2026-10-29）`
 
 ### 1. 介面
 | # | 項目 | 說明 |
@@ -35,6 +35,7 @@
 | 1 | bridge handler `log_append`（名稱不變） | 請求新增選填欄位 `target`；缺省時行為與現況完全相同（寫入 `internal` 的 `logs/` 目錄、檔名 key 取 `log_set_key` 設定值，預設 `app`） |
 | 2 | JS API `installConsoleLog(options?)` | 於 `@aqutter/aqutter` 匯出；攔截 `console.debug/log/info/warn/error`，並新增 `console.to.{debug,log,info,warn,error}(target, ...args)`；回傳 `uninstall()` |
 | 3 | JS API `isConsoleLogInstalled()` | 供 App 層避免重複寫檔（例如 nuxt-app 的 `useAppLog`） |
+| 4 | JS API `setConsoleLogTarget(target)`（rev 2） | 執行中改變一般 `console.*` 的目標；`target` 同下方 `TargetSource`；未安裝時為 no-op |
 
 ### 2. 欄位
 **`LogAppendRequest`**（`@aqutter/aqutter/contract`）
@@ -60,7 +61,13 @@
 |---|---|---|---|
 | `devtools` | `boolean` | `true` | `false` 時**不呼叫**原生 console（release 不輸出到 devtools，避免額外負擔）；SDK 不判斷 dev／release，由 App 傳入（Nuxt：`import.meta.dev`） |
 | `file` | `boolean \| { minLevel?: LogLevel }` | `true` | 是否經 bridge 寫檔；`minLevel` 預設 `debug` |
-| `target` | `LogTarget` | `{}`（走 bridge 預設） | 一般 `console.*` 使用的目標 |
+| `target` | `TargetSource` | `undefined`（走殼的預設位置） | 一般 `console.*` 使用的目標；可為物件或函式（rev 2） |
+
+**`TargetSource`（rev 2）** ＝ `LogTarget | ((call: ConsoleLogCall) => LogTarget | undefined)`；`console.to.<level>` 的第一個參數 ＝ `TargetSource | string`。
+- `ConsoleLogCall` ＝ `{ level: LogLevel, method: ConsoleMethod, time: Date }`。
+- 函式在**每一筆 log 呼叫當下**（排入佇列之前、同步）求值，因此可依當下時間／狀態決定 provider、dir、name（例如換日換檔名、依使用者切目錄）。回傳 `undefined` ＝ 走殼的預設位置。
+- 函式必須同步、不得呼叫 `console.*`（會遞迴）；丟出例外時：該筆改走預設位置，並以錯誤代碼 `log_target_error` 只提示一次。
+- 殼端行為不變（線上格式仍是純 `LogTarget`，函式只存在於 JS 端）；殼本身仍在每次寫入時以當下日期組檔名，所以不傳 `name` 時換日由殼自動處理。
 
 ### 3. 錯誤
 | 代碼（訊息前綴） | 觸發條件 | JS 端行為 |
@@ -78,14 +85,14 @@
 - 新增 `LogProvider` 列舉與 `LogAppendRequest.target`，對既有消費方為純新增。
 
 ### 6. 變更紀錄
-- _(尚無)_
+- 2026-10-29 rev 2（草擬）：新增 `TargetSource`（`target` 可為函式，每筆呼叫求值）、`setConsoleLogTarget`、錯誤代碼 `log_target_error`。原因：使用者需要在寫檔當下動態決定路徑／檔名（無排程可覆寫）。影響：僅 `aqutter-js`（API）；`aqutter` 殼與線上格式不變、`aqutter-nuxt-app` 無需改動。
 
 ## Impact Files
 - `src/contract/bridge.ts:133` (`LogLevel`) — 其後新增 `LogProvider` 列舉與 `LogTarget`；`:228` (`LogAppendRequest`) 新增選填 `target`
 - `src/contract/table.ts:116` (`BridgeHandler.LogAppend`) — 契約表型別沿用 `LogAppendRequest`，確認無需改動（若型別推導需要才動）
-- `src/console.ts` (new) — `installConsoleLog`、`isConsoleLogInstalled`、`console.to`
+- `src/console.ts` (new，已存在) — rev 2：`TargetSource` 求值、`setConsoleLogTarget`、`log_target_error`
 - `src/index.ts:282` (`export * from './nativeview'`) — 新增 `export * from './console'`
-- `test/console.test.ts` (new) — 攔截、devtools 開關、序列化、`to.*`、串行與錯誤處理
+- `test/console.test.ts` (new，已存在) — rev 2：函式目標每筆求值、換日情境、回傳 undefined、丟例外、`setConsoleLogTarget`
 
 ## App-Flow Screens
 （無 app-flow.json）
@@ -116,3 +123,5 @@
 - **[契約]** rev 1 凍結（2026-10-29）。
 - **[完成後]** 只 commit（不 push、不 PR、不歸檔）— 理由：核准閘選項為直接 main、不開 PR；push 待使用者另行要求。
 - **[執行模式]** 序列（依據：三 repo 相依成一條線，且無法確認可派出獨立子 agent）。
+
+- **[契約]** rev 2 凍結（2026-10-29）：TargetSource 函式、setConsoleLogTarget、log_target_error；函式丟例外改走預設位置並提示一次（使用者核准）。
