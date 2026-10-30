@@ -80,6 +80,10 @@ export enum BridgeHandler {
   ClipboardRead = 'clipboard_read',
   /** 寫入剪貼簿純文字。 */
   ClipboardWrite = 'clipboard_write',
+  /** 讀取剪貼簿圖片（一律以 PNG 回傳；Android、iOS、macOS、Windows）。 */
+  ClipboardReadImage = 'clipboard_read_image',
+  /** 寫入剪貼簿圖片（PNG 或 JPEG；Android、iOS、macOS、Windows）。 */
+  ClipboardWriteImage = 'clipboard_write_image',
 
   /** 開啟系統分享面板（文字／網址）。 */
   ShareOpen = 'share_open',
@@ -357,11 +361,34 @@ export interface ClipboardWriteRequest {
   text: string
 }
 
-/** 系統分享面板請求；`text` 與 `url` 至少一個非空，各欄位 ≤ 10,000。`url` 不檢查格式。 */
+/** 剪貼簿圖片讀取結果；沒有圖片為 null。圖片超過 5,242,880 位元組時以錯誤碼 `too_large` 失敗（不截斷、不重試）。 */
+export interface ClipboardReadImageResponse {
+  image: { mimeType: 'image/png', data: Uint8Array } | null
+}
+
+/** 寫入剪貼簿圖片；`data` ≤ 5,242,880 位元組，必須是 PNG 或 JPEG。 */
+export interface ClipboardWriteImageRequest {
+  data: Uint8Array
+  /** PNG 或 JPEG；省略視為 `image/png`。 */
+  mimeType?: string
+}
+
+/** 分享的一個檔案；殼暫存後交給系統分享面板，分享結束後盡力刪除。 */
+export interface ShareFile {
+  /** 單一檔名（不含路徑分隔、不為 `.`／`..`、≤ 128 字）。 */
+  name: string
+  /** 省略時依副檔名判斷，判斷不出來用 `application/octet-stream`；分享圖片請給 `image/png`／`image/jpeg`。 */
+  mimeType?: string
+  /** 每個檔案 ≤ 5,242,880 位元組。 */
+  data: Uint8Array
+}
+
+/** 系統分享面板請求；`text`、`url`、`files` 至少一個有內容，文字欄位各 ≤ 10,000，`files` 最多 5 個。`url` 不檢查格式。 */
 export interface ShareOpenRequest {
   text?: string
   url?: string
   subject?: string
+  files?: ShareFile[]
 }
 
 /** 分享結果：`shared` 已分享、`dismissed` 使用者關閉、`unavailable` 本機無法分享。 */
@@ -375,6 +402,7 @@ export interface ShareOpenResponse {
 /**
  * 顯示通知請求。錯誤碼：`invalid_argument`（欄位缺漏、型別錯、超過上限）、
  * `permission_denied`（系統通知權限未授權，須先以 `perm_request` 取得）。
+ * 另有 `too_large`：僅 {@link BridgeHandler.ClipboardReadImage} 會回（圖片超過 5,242,880 位元組）。
  */
 export interface NotifyShowRequest {
   /** 32 位元有號整數；省略時由殼配發（從 1 遞增）；相同 id 會取代原通知。 */

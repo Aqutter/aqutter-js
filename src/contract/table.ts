@@ -31,7 +31,9 @@ import type {
   BundleCheckResult,
   BundleDownloadRequest,
   BundleInfo,
+  ClipboardReadImageResponse,
   ClipboardReadResponse,
+  ClipboardWriteImageRequest,
   ClipboardWriteRequest,
   CrashAckRequest,
   CrashReportsPayload,
@@ -147,6 +149,8 @@ export type BridgeContract = {
   [BridgeHandler.OpenerOpen]: { req: OpenUrlRequest, res: OkResponse }
   [BridgeHandler.ClipboardRead]: { req: NoPayload, res: ClipboardReadResponse }
   [BridgeHandler.ClipboardWrite]: { req: ClipboardWriteRequest, res: OkResponse }
+  [BridgeHandler.ClipboardReadImage]: { req: NoPayload, res: ClipboardReadImageResponse }
+  [BridgeHandler.ClipboardWriteImage]: { req: ClipboardWriteImageRequest, res: OkResponse }
 
   [BridgeHandler.ShareOpen]: { req: ShareOpenRequest, res: ShareOpenResponse }
 
