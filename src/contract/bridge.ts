@@ -76,6 +76,26 @@ export enum BridgeHandler {
   /** 以系統瀏覽器外開 URL。 */
   OpenerOpen = 'opener_open',
 
+  /** 讀取剪貼簿純文字；沒有文字時回 null。 */
+  ClipboardRead = 'clipboard_read',
+  /** 寫入剪貼簿純文字。 */
+  ClipboardWrite = 'clipboard_write',
+
+  /** 開啟系統分享面板（文字／網址）。 */
+  ShareOpen = 'share_open',
+
+  /** 立即顯示本機通知（Android、iOS、macOS）；不會自動請求通知權限。 */
+  NotifyShow = 'notify_show',
+  /** 以絕對時間點排程本機通知（非精確排程）。 */
+  NotifySchedule = 'notify_schedule',
+  /** 取消通知；省略 id 取消全部。 */
+  NotifyCancel = 'notify_cancel',
+  /** 取得「點通知而冷啟 App」的通知資訊；否則兩者皆 null。 */
+  NotifyInitial = 'notify_initial',
+
+  /** 取得啟動 App 的深層連結；同一程序內重複呼叫回傳相同值。 */
+  DeeplinkInitial = 'deeplink_initial',
+
   /** 開啟 In-App Browser（Custom Tabs / SFSafariViewController）。 */
   IabOpen = 'iab_open',
   /** 關閉 In-App Browser。 */
@@ -199,6 +219,10 @@ export enum BridgeEvent {
    * 只在 JS 呼叫過 {@link BridgeHandler.CrashTake} 之後才會送；JS 寫入目標檔案後以 {@link BridgeHandler.CrashAck} 確認。
    */
   CrashReports = 'crash_reports',
+  /** App 執行中使用者點了通知，payload 為 {@link NotifyTappedPayload}。 */
+  NotifyTapped = 'notify_tapped',
+  /** App 執行中收到新的深層連結，payload 為 {@link DeepLinkPayload}；啟動 App 的連結只由 {@link BridgeHandler.DeeplinkInitial} 取得。 */
+  DeepLink = 'deep_link',
 }
 
 /**
@@ -320,6 +344,84 @@ export interface LocaleResponse {
 
 /** 開啟 URL 的請求；OpenerOpen / IabOpen 共用。 */
 export interface OpenUrlRequest {
+  url: string
+}
+
+/** 剪貼簿讀取結果；沒有文字時為 null。 */
+export interface ClipboardReadResponse {
+  text: string | null
+}
+
+/** 寫入剪貼簿；`text` 長度 ≤ 1,000,000（UTF-16 單元）。 */
+export interface ClipboardWriteRequest {
+  text: string
+}
+
+/** 系統分享面板請求；`text` 與 `url` 至少一個非空，各欄位 ≤ 10,000。`url` 不檢查格式。 */
+export interface ShareOpenRequest {
+  text?: string
+  url?: string
+  subject?: string
+}
+
+/** 分享結果：`shared` 已分享、`dismissed` 使用者關閉、`unavailable` 本機無法分享。 */
+export type ShareStatus = 'shared' | 'dismissed' | 'unavailable'
+
+/** 分享回應。 */
+export interface ShareOpenResponse {
+  status: ShareStatus
+}
+
+/**
+ * 顯示通知請求。錯誤碼：`invalid_argument`（欄位缺漏、型別錯、超過上限）、
+ * `permission_denied`（系統通知權限未授權，須先以 `perm_request` 取得）。
+ */
+export interface NotifyShowRequest {
+  /** 32 位元有號整數；省略時由殼配發（從 1 遞增）；相同 id 會取代原通知。 */
+  id?: number
+  /** 1–200 字。 */
+  title: string
+  /** ≤ 2,000 字；省略視為空。 */
+  body?: string
+  /** ≤ 1,000 字；殼原樣帶回，不解讀。 */
+  payload?: string
+}
+
+/** 排程通知請求；`atMs` 必須大於目前時間，否則 `invalid_argument`。 */
+export interface NotifyScheduleRequest extends NotifyShowRequest {
+  /** 觸發時間（epoch 毫秒，絕對時間點）。 */
+  atMs: number
+}
+
+/** 通知 id 回應；NotifyShow / NotifySchedule 共用。 */
+export interface NotifyIdResponse {
+  id: number
+}
+
+/** 取消通知；省略 id 取消全部。 */
+export interface NotifyCancelRequest {
+  id?: number
+}
+
+/** 點通知而冷啟 App 時的通知資訊；否則兩者皆 null。 */
+export interface NotifyInitialResponse {
+  id: number | null
+  payload: string | null
+}
+
+/** {@link BridgeEvent.NotifyTapped} 的酬載。 */
+export interface NotifyTappedPayload {
+  id: number
+  payload: string | null
+}
+
+/** 啟動 App 的深層連結；沒有時為 null。 */
+export interface DeeplinkInitialResponse {
+  url: string | null
+}
+
+/** {@link BridgeEvent.DeepLink} 的酬載；網頁必須自行驗證連結再導航，殼不過濾。 */
+export interface DeepLinkPayload {
   url: string
 }
 
