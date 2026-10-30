@@ -5,6 +5,7 @@ window.WIKI_MANIFEST={
 "appflow":null,
 "pages":[
 "index.md",
+"platform/builtin-capabilities.md",
 "platform/console-log.md",
 "platform/endpoint.md",
 "platform/transport.md",

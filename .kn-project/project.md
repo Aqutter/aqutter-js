@@ -1,7 +1,7 @@
 <!-- REMINDER: Relative Paths Only! No file:///c:/... -->
 # aqutter-js
 
-Aqutter 殼的網頁端 client：npm 套件 `@aqutter/aqutter`，框架中立（不依賴 Nuxt／Vite 等），提供 bridge 呼叫、事件訂閱、plugin API、native view 鏡像與跨層契約型別。以 TypeScript 原始碼發佈，由使用端打包器編譯。詳見 [README.md](../README.md)。
+Aqutter 殼的網頁端 client：npm 套件 `@aqutter/aqutter`，框架中立（不依賴 Nuxt／Vite 等），提供 bridge 呼叫、事件訂閱（含殼內建的剪貼簿、分享、本機通知、深層連結能力）、plugin API、native view 鏡像與跨層契約型別。以 TypeScript 原始碼發佈，由使用端打包器編譯。詳見 [README.md](../README.md)；殼內建能力見 [wiki](wiki/platform/builtin-capabilities.md)。
 
 ## 保留鐵則
 

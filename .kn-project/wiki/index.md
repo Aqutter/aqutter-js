@@ -4,6 +4,7 @@
 
 ## 平台
 
+- [殼內建能力](platform/builtin-capabilities.md)
 - [主控台日誌](platform/console-log.md)
 - [連線資訊](platform/endpoint.md)
 - [統一傳輸](platform/transport.md)
