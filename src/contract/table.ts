@@ -31,14 +31,8 @@ import type {
   BundleCheckResult,
   BundleDownloadRequest,
   BundleInfo,
-  ClipboardReadImageResponse,
-  ClipboardReadResponse,
-  ClipboardWriteImageRequest,
-  ClipboardWriteRequest,
   CrashAckRequest,
   CrashReportsPayload,
-  DeepLinkPayload,
-  DeeplinkInitialResponse,
   DownloadProgressPayload,
   DownloadRequest,
   DownloadResponse,
@@ -56,12 +50,6 @@ import type {
   LogReadResponse,
   LogSetKeyRequest,
   LogWriteRequest,
-  NotifyCancelRequest,
-  NotifyIdResponse,
-  NotifyInitialResponse,
-  NotifyScheduleRequest,
-  NotifyShowRequest,
-  NotifyTappedPayload,
   OkResponse,
   OpenUrlRequest,
   OrientationLockRequest,
@@ -69,8 +57,6 @@ import type {
   PermissionResponse,
   PickerRequest,
   PickerResponse,
-  ShareOpenRequest,
-  ShareOpenResponse,
   StatusBarImmersiveRequest,
   StoreGetRequest,
   StoreGetResponse,
@@ -119,7 +105,6 @@ export type BridgeContract = {
   [BridgeHandler.PlatformInfo]: { req: NoPayload, res: PlatformInfo }
   [BridgeHandler.AppReady]: { req: NoPayload, res: OkResponse }
 
-
   [BridgeHandler.StoreGet]: { req: StoreGetRequest, res: StoreGetResponse }
   [BridgeHandler.StoreSet]: { req: StoreSetRequest, res: OkResponse }
 
@@ -147,19 +132,6 @@ export type BridgeContract = {
   [BridgeHandler.PermOpenSettings]: { req: NoPayload, res: OkResponse }
 
   [BridgeHandler.OpenerOpen]: { req: OpenUrlRequest, res: OkResponse }
-  [BridgeHandler.ClipboardRead]: { req: NoPayload, res: ClipboardReadResponse }
-  [BridgeHandler.ClipboardWrite]: { req: ClipboardWriteRequest, res: OkResponse }
-  [BridgeHandler.ClipboardReadImage]: { req: NoPayload, res: ClipboardReadImageResponse }
-  [BridgeHandler.ClipboardWriteImage]: { req: ClipboardWriteImageRequest, res: OkResponse }
-
-  [BridgeHandler.ShareOpen]: { req: ShareOpenRequest, res: ShareOpenResponse }
-
-  [BridgeHandler.NotifyShow]: { req: NotifyShowRequest, res: NotifyIdResponse }
-  [BridgeHandler.NotifySchedule]: { req: NotifyScheduleRequest, res: NotifyIdResponse }
-  [BridgeHandler.NotifyCancel]: { req: NotifyCancelRequest, res: OkResponse }
-  [BridgeHandler.NotifyInitial]: { req: NoPayload, res: NotifyInitialResponse }
-
-  [BridgeHandler.DeeplinkInitial]: { req: NoPayload, res: DeeplinkInitialResponse }
 
   [BridgeHandler.IabOpen]: { req: OpenUrlRequest, res: OkResponse }
   [BridgeHandler.IabClose]: { req: NoPayload, res: OkResponse }
@@ -225,8 +197,6 @@ export type BridgeEventContract = {
   [BridgeEvent.DownloadProgress]: DownloadProgressPayload
   [BridgeEvent.UpdateState]: UpdateStatePayload
   [BridgeEvent.CrashReports]: CrashReportsPayload
-  [BridgeEvent.NotifyTapped]: NotifyTappedPayload
-  [BridgeEvent.DeepLink]: DeepLinkPayload
 }
 
 /**

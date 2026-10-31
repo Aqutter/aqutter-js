@@ -76,30 +76,6 @@ export enum BridgeHandler {
   /** 以系統瀏覽器外開 URL。 */
   OpenerOpen = 'opener_open',
 
-  /** 讀取剪貼簿純文字；沒有文字時回 null。 */
-  ClipboardRead = 'clipboard_read',
-  /** 寫入剪貼簿純文字。 */
-  ClipboardWrite = 'clipboard_write',
-  /** 讀取剪貼簿圖片（一律以 PNG 回傳；Android、iOS、macOS、Windows）。 */
-  ClipboardReadImage = 'clipboard_read_image',
-  /** 寫入剪貼簿圖片（PNG 或 JPEG；Android、iOS、macOS、Windows）。 */
-  ClipboardWriteImage = 'clipboard_write_image',
-
-  /** 開啟系統分享面板（文字／網址）。 */
-  ShareOpen = 'share_open',
-
-  /** 立即顯示本機通知（Android、iOS、macOS）；不會自動請求通知權限。 */
-  NotifyShow = 'notify_show',
-  /** 以絕對時間點排程本機通知（非精確排程）。 */
-  NotifySchedule = 'notify_schedule',
-  /** 取消通知；省略 id 取消全部。 */
-  NotifyCancel = 'notify_cancel',
-  /** 取得「點通知而冷啟 App」的通知資訊；否則兩者皆 null。 */
-  NotifyInitial = 'notify_initial',
-
-  /** 取得啟動 App 的深層連結；同一程序內重複呼叫回傳相同值。 */
-  DeeplinkInitial = 'deeplink_initial',
-
   /** 開啟 In-App Browser（Custom Tabs / SFSafariViewController）。 */
   IabOpen = 'iab_open',
   /** 關閉 In-App Browser。 */
@@ -223,10 +199,6 @@ export enum BridgeEvent {
    * 只在 JS 呼叫過 {@link BridgeHandler.CrashTake} 之後才會送；JS 寫入目標檔案後以 {@link BridgeHandler.CrashAck} 確認。
    */
   CrashReports = 'crash_reports',
-  /** App 執行中使用者點了通知，payload 為 {@link NotifyTappedPayload}。 */
-  NotifyTapped = 'notify_tapped',
-  /** App 執行中收到新的深層連結，payload 為 {@link DeepLinkPayload}；啟動 App 的連結只由 {@link BridgeHandler.DeeplinkInitial} 取得。 */
-  DeepLink = 'deep_link',
 }
 
 /**
@@ -402,7 +374,7 @@ export interface ShareOpenResponse {
 /**
  * 顯示通知請求。錯誤碼：`invalid_argument`（欄位缺漏、型別錯、超過上限）、
  * `permission_denied`（系統通知權限未授權，須先以 `perm_request` 取得）。
- * 另有 `too_large`：僅 {@link BridgeHandler.ClipboardReadImage} 會回（圖片超過 5,242,880 位元組）。
+ * 另有 `too_large`：僅 `clipboard.readImage` 會回（圖片超過 5,242,880 位元組）。
  */
 export interface NotifyShowRequest {
   /** 32 位元有號整數；省略時由殼配發（從 1 遞增）；相同 id 會取代原通知。 */
@@ -421,7 +393,7 @@ export interface NotifyScheduleRequest extends NotifyShowRequest {
   atMs: number
 }
 
-/** 通知 id 回應；NotifyShow / NotifySchedule 共用。 */
+/** 通知 id 回應；`notification.show` / `notification.schedule` 共用。 */
 export interface NotifyIdResponse {
   id: number
 }
@@ -437,7 +409,7 @@ export interface NotifyInitialResponse {
   payload: string | null
 }
 
-/** {@link BridgeEvent.NotifyTapped} 的酬載。 */
+/** `notification.tapped` 事件的酬載。 */
 export interface NotifyTappedPayload {
   id: number
   payload: string | null
@@ -448,7 +420,7 @@ export interface DeeplinkInitialResponse {
   url: string | null
 }
 
-/** {@link BridgeEvent.DeepLink} 的酬載；網頁必須自行驗證連結再導航，殼不過濾。 */
+/** `deeplink.received` 事件的酬載；網頁必須自行驗證連結再導航，殼不過濾。 */
 export interface DeepLinkPayload {
   url: string
 }

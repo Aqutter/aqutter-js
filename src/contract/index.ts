@@ -1,4 +1,5 @@
 export * from './bridge'
+export * from './builtinPlugins'
 export * from './table'
 export * from './models/broadcast'
 export * from './models/device'

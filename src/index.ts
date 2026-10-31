@@ -1,4 +1,5 @@
 import { BridgeEvent, BridgeHandler } from './contract/bridge'
+import type { BuiltinPluginRegistry } from './contract/builtinPlugins'
 import type { BridgeContract, BridgeEventContract, PayloadArgs } from './contract/table'
 import { installConsoleLogWith } from './console'
 import type { ConsoleLogOptions } from './console'
@@ -217,9 +218,12 @@ export interface PluginDefinition<
   events: E
 }
 
-/** 已註冊契約的 plugin 表；由各 plugin 套件以 module augmentation 擴充。 */
+/**
+ * 已註冊契約的 plugin 表：殼內建的四個 plugin（剪貼簿、分享、本機通知、深層連結，見
+ * {@link BuiltinPluginRegistry}）加上各 plugin 套件以 module augmentation 擴充的項目。
+ */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface AqutterPluginRegistry {}
+export interface AqutterPluginRegistry extends BuiltinPluginRegistry {}
 
 type RegistryId = keyof AqutterPluginRegistry & string
 type MethodsOf<Id extends RegistryId> = AqutterPluginRegistry[Id] extends { methods: infer M } ? M : never
