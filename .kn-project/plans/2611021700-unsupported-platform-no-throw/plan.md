@@ -4,7 +4,7 @@
 - Issue: N/A（無 issue 追蹤基準）
 - Milestone: N/A（未指定）
 - Base Branch: main
-- Status: Planning
+- Status: In Progress
 - Completed: [Wait for Finish]
 
 ## Goals
@@ -31,7 +31,7 @@ plugin 在某個平台沒有實作時，**不能讓正式版壞掉**（使用者
 - **執行順序相依**: 契約凍結後，`aqutter-js` 先；`aqutter` 與 `aqutter-plugins` 依賴新型別，須等 `aqutter-js` push 並更新 client 版本；範例 App 最後。
 
 ## Contract / 介面契約
-- **契約正本 repo**: `aqutter-js`　**修訂號**: `rev 1`　**狀態**: `草擬`
+- **契約正本 repo**: `aqutter-js`　**修訂號**: `rev 1`　**狀態**: `凍結（核准日 2026-11-02）`
 
 ### 1. 網頁端 `callPlugin`／`callPluginRaw`
 | 情況 | 現在 | 之後 |
@@ -46,13 +46,15 @@ plugin 在某個平台沒有實作時，**不能讓正式版壞掉**（使用者
 
 ### 2. 開發階段警告
 - 條件：`platform_info.dev === true`，且該（plugin、方法、原因）在本次頁面載入還沒印過。
-- 格式：`[aqutter] plugin call skipped: <id>.<method> (<原因>)`，原因為 `unsupported on <platform>`、`plugin not installed` 或 `not running inside Flutter`；用 `console.warn`。
+- 格式：`[aqutter] plugin call skipped: <id>.<method> (<原因>)`，原因為 `unsupported on this platform`、`plugin not installed` 或 `not running inside Flutter`；用 `console.warn`。
 - `dev` 為 false、未提供（舊殼）或尚未取得時：不印。
 
 ### 3. `platform_info` 新欄位
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | `dev` | `boolean`（選填） | 殼連 dev server 或為 debug 建置時為 `true`；省略視為 `false` |
+
+網頁端取得方式：呼叫端把 `platform_info.dev` 傳給 `setBridgeCapabilities(names, { dev })`（與能力表同一個呼叫點）；不傳視為 `false`。
 
 ### 4. 官方 plugin 的網頁 API
 | 規則 | 說明 |
@@ -79,9 +81,9 @@ plugin 在某個平台沒有實作時，**不能讓正式版壞掉**（使用者
 
 ## Open Questions / 待確認事項
 ### Q1. 「沒裝該 plugin」（`HANDLER_NOT_FOUND`）也回 `undefined` 嗎？ — 影響範圍：`callPluginRaw`
-- [ ] 是（建議：符合「缺實作不能弄壞正式版」，開發階段仍會警告，拼錯方法名在 dev 看得到）
+- [x] 是（建議：符合「缺實作不能弄壞正式版」，開發階段仍會警告，拼錯方法名在 dev 看得到）
 - [ ] 否，只處理 `UNSUPPORTED_PLATFORM`（沒裝 plugin 仍拋錯，較容易發現漏裝）
-- **決議**：_(待確認)_　狀態：⏳ 待確認
+- **決議**：照建議　狀態：✅ 已確認
 
 ### Q2. 純瀏覽器（不在 Flutter 內）也回 `undefined` 嗎？ — 影響範圍：`callPluginRaw`
 - [x] 是（建議：純瀏覽器開發時各功能不再需要到處 try/catch；因為沒有 `platform_info`，這種情況不會印警告）
@@ -89,9 +91,9 @@ plugin 在某個平台沒有實作時，**不能讓正式版壞掉**（使用者
 - **決議**：是　狀態：✅ 已確認
 
 ### Q3. 警告的出口 — 影響範圍：開發階段的提示
-- [ ] `console.warn` 一次性（建議：最簡單，Nuxt 的開發者工具看得到）
+- [x] `console.warn` 一次性（建議：最簡單，Nuxt 的開發者工具看得到）
 - [ ] 也寫進殼的日誌檔
-- **決議**：_(待確認)_　狀態：⏳ 待確認
+- **決議**：照建議　狀態：✅ 已確認
 
 ## Manual Follow-ups / 人工收尾事項
 - **[合併後]** 使用 `callPlugin` 的既有 App 升級後 TypeScript 會報型別錯誤，需要處理 `undefined` — 這是預期的破壞性型別變更 — 屬各 App 的程式碼，agent 不代改（範例 App 由本計畫處理）。
@@ -99,8 +101,9 @@ plugin 在某個平台沒有實作時，**不能讓正式版壞掉**（使用者
 ## Key Decisions
 - **[行為]** 不支援的平台回 `undefined`、型別改 `Res | undefined`（使用者選擇）。
 - **[警告]** 只在開發階段（`dev`）印警告，正式版完全安靜（使用者要求）。
+- **[Q1]** 沒裝 plugin 也回 `undefined`（理由：網頁 OTA 更新與殼版本可能落差，編譯期抓不到；開發階段警告補償）。**[Q2]** 純瀏覽器也回 `undefined`。**[Q3]** `console.warn` 一次性。
 - **[傳輸不變]** 殼仍回 `UNSUPPORTED_PLATFORM`，轉換只在網頁端 — 理由：新舊殼與新舊網頁端任意組合都能運作。
-- **[流程]** 直接 main、不建 issue（待核准時確認）。
+- **[流程]** 直接 main、不建 issue（使用者於核准閘確認）。
 
 ## Git Completion Policy
 - commit 自動；push 依核准閘選項。
