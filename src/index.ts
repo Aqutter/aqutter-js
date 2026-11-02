@@ -97,6 +97,12 @@ export const callFlutter = async <H extends BridgeHandler>(
  */
 let capabilities: ReadonlySet<string> | null = null
 
+/** 殼是否在開發階段（連 dev server 或 debug 建置）。由 {@link setBridgeCapabilities} 的 `dev` 填入；未知視為 false，所以預設不印警告。 */
+let devMode = false
+
+/** 本次頁面載入已警告過的（呼叫、原因），同一個組合只印一次。 */
+const warnedPluginSkips = new Set<string>()
+
 /** 兩端 handler 名單的差異；兩個陣列皆為空代表名單一致。 */
 export interface BridgeNameMismatch {
   /**
@@ -110,6 +116,11 @@ export interface BridgeNameMismatch {
 
 /** {@link setBridgeCapabilities} 的選項。 */
 export interface BridgeCapabilitiesOptions {
+  /**
+   * 殼回報的 `platform_info.dev`。為 `true` 時，被略過的 plugin 呼叫會在 console 警告一次（見 {@link callPluginRaw}）；
+   * 省略或 `false` 時完全安靜（正式版）。
+   */
+  dev?: boolean
   /**
    * 兩端名單有任何差異時呼叫；未提供則完全不比對。
    * 套件本身不判斷是否為開發環境，由呼叫端決定要不要傳（例如只在 dev 模式傳入）。
@@ -129,6 +140,7 @@ export const setBridgeCapabilities = (
   names: readonly string[] | undefined,
   options: BridgeCapabilitiesOptions = {},
 ): void => {
+  devMode = options.dev === true
   if (!names) {
     capabilities = null
     return
@@ -235,26 +247,62 @@ export const pluginHandlerName = (pluginId: string, method: string): string => `
 /** 與 Dart 端 `aqutterPluginEventChannel` 同一條命名規則。 */
 export const pluginEventChannel = (pluginId: string, event: string): string => `${pluginId}.${event}`
 
+/** plugin 呼叫被略過時的原因；只用在開發階段的警告。 */
+type PluginSkipReason = 'unsupported on this platform' | 'plugin not installed' | 'not running inside Flutter'
+
+/** 回 `undefined`（plugin 在這裡用不了）；開發階段每個（呼叫、原因）警告一次，正式版安靜。 */
+const skipPluginCall = (name: string, reason: PluginSkipReason): undefined => {
+  const key = `${name}|${reason}`
+  if (devMode && !warnedPluginSkips.has(key)) {
+    warnedPluginSkips.add(key)
+    console.warn(`[aqutter] plugin call skipped: ${name} (${reason})`)
+  }
+  return undefined
+}
+
 /**
- * 呼叫 plugin 方法（未型別化）。plugin 沒有發佈契約，或在 Flutter 之外時使用；
- * 非 Flutter 環境直接拋錯，與 {@link callFlutter} 一致。
- * 殼回傳 `aqutterError`（見 {@link AqutterPluginError}）時拋出該錯誤，其餘結果原樣回傳。
+ * 呼叫 plugin 方法（未型別化）。plugin 沒有發佈契約時使用。
+ *
+ * plugin 在這裡**用不了**時回 `undefined` 而不是拋錯，正式版才不會因為缺少某個平台的實作而壞掉：
+ * - 殼回 `UNSUPPORTED_PLATFORM`（plugin 在這個平台沒有實作）；
+ * - 殼回 `HANDLER_NOT_FOUND`（這個 App 的殼沒有裝該 plugin，例如網頁包已經 OTA 更新、殼還是舊版）；
+ * - 不在 Flutter 內（純瀏覽器開發）。
+ *
+ * 開發階段（`setBridgeCapabilities` 的 `dev`）會在 console 警告一次；正式版不印。
+ * 其餘錯誤（plugin 自己的錯誤碼、`HANDLER_FAILED`、`PAYLOAD_TOO_LARGE`、`TRANSPORT_*`）照舊拋出
+ * {@link AqutterPluginError}。要事先判斷用 {@link isPluginSupported}。
  */
 export const callPluginRaw = async (pluginId: string, method: string, payload?: unknown): Promise<unknown> => {
   const name = pluginHandlerName(pluginId, method)
   if (!isFlutter()) {
-    throw new Error(`[flutterBridge] callPlugin(${name}) is only available inside Flutter`)
+    return skipPluginCall(name, 'not running inside Flutter')
   }
-  return await getTransport()!.call(name, payload ?? {})
+  try {
+    return await getTransport()!.call(name, payload ?? {})
+  }
+  catch (error) {
+    if (error instanceof AqutterPluginError) {
+      if (error.code === 'UNSUPPORTED_PLATFORM') {
+        return skipPluginCall(name, 'unsupported on this platform')
+      }
+      if (error.code === 'HANDLER_NOT_FOUND') {
+        return skipPluginCall(name, 'plugin not installed')
+      }
+    }
+    throw error
+  }
 }
 
-/** 呼叫 plugin 方法；型別由 {@link AqutterPluginRegistry} 決定。 */
+/**
+ * 呼叫 plugin 方法；型別由 {@link AqutterPluginRegistry} 決定。
+ * 回傳 `undefined` 代表 plugin 在這裡用不了（見 {@link callPluginRaw}），呼叫端必須處理。
+ */
 export const callPlugin = async <Id extends RegistryId, M extends keyof MethodsOf<Id> & string>(
   pluginId: Id,
   method: M,
   ...[payload]: MethodsOf<Id>[M] extends { req: void } ? [] : [payload: MethodsOf<Id>[M] extends { req: infer R } ? R : never]
-): Promise<MethodsOf<Id>[M] extends { res: infer R } ? R : never> => {
-  return await callPluginRaw(pluginId, method, payload) as MethodsOf<Id>[M] extends { res: infer R } ? R : never
+): Promise<(MethodsOf<Id>[M] extends { res: infer R } ? R : never) | undefined> => {
+  return await callPluginRaw(pluginId, method, payload) as (MethodsOf<Id>[M] extends { res: infer R } ? R : never) | undefined
 }
 
 /** 訂閱 plugin 事件（未型別化）。回傳取消訂閱函式。 */
@@ -277,7 +325,7 @@ export const onPluginEvent = <Id extends RegistryId, E extends keyof EventsOf<Id
  * plugin 方法在本平台是否可用。能力表尚未取得時視為支援（理由同 {@link isBridgeSupported}）。
  * plugin 的 handler 一律列入 host 的能力表，故沒裝該 plugin 的 App 會得到 false。
  * plugin 若宣告 `supportedPlatforms`（Dart 端 `AqutterPlugin`），在不支援的平台上其 handler 仍會註冊、
- * 但**不列入**能力表，所以這裡回 false；此時直接呼叫會得到 {@link AqutterPluginError}（`UNSUPPORTED_PLATFORM`）。
+ * 但**不列入**能力表，所以這裡回 false；此時直接呼叫 {@link callPlugin} 會回 `undefined`（開發階段警告一次，不拋錯）。
  */
 export const isPluginSupported = (pluginId: string, method: string): boolean => {
   if (!isFlutter()) {

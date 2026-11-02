@@ -3,22 +3,23 @@ import { callPlugin, onPluginEvent } from '../src/index'
 
 export const check = async (): Promise<void> => {
   // clipboard
-  const text: string | null = (await callPlugin('clipboard', 'read')).text
+  // 回傳型別含 undefined（plugin 在這個平台用不了）：呼叫端用 ?. 取欄位
+  const text: string | null | undefined = (await callPlugin('clipboard', 'read'))?.text
   await callPlugin('clipboard', 'write', { text: 'x' })
-  const image = (await callPlugin('clipboard', 'readImage')).image
+  const image = (await callPlugin('clipboard', 'readImage'))?.image
   const bytes: Uint8Array | undefined = image?.data
   await callPlugin('clipboard', 'writeImage', { data: new Uint8Array(1), mimeType: 'image/png' })
 
   // share
-  const status: 'shared' | 'dismissed' | 'unavailable' = (await callPlugin('share', 'open', { text: 'x' })).status
+  const status: 'shared' | 'dismissed' | 'unavailable' | undefined = (await callPlugin('share', 'open', { text: 'x' }))?.status
 
   // notification
-  const id: number = (await callPlugin('notification', 'show', { title: 't' })).id
+  const id: number | undefined = (await callPlugin('notification', 'show', { title: 't' }))?.id
   await callPlugin('notification', 'schedule', { title: 't', atMs: Date.now() + 1000 })
-  await callPlugin('notification', 'cancel', { id })
+  await callPlugin('notification', 'cancel', { id: id ?? 0 })
   await callPlugin('notification', 'cancel', {})
   const initial = await callPlugin('notification', 'initial')
-  const initialId: number | null = initial.id
+  const initialId: number | null | undefined = initial?.id
   onPluginEvent('notification', 'tapped', (payload) => {
     const tappedId: number = payload.id
     const tappedPayload: string | null = payload.payload
@@ -27,13 +28,17 @@ export const check = async (): Promise<void> => {
   })
 
   // deeplink
-  const url: string | null = (await callPlugin('deeplink', 'initial')).url
+  const url: string | null | undefined = (await callPlugin('deeplink', 'initial'))?.url
   onPluginEvent('deeplink', 'received', (payload) => {
     const link: string = payload.url
     void link
   })
 
   void [text, bytes, status, initialId, url]
+
+  // @ts-expect-error 直接取欄位會被擋：回傳可能是 undefined
+  const unsafe: string | null = (await callPlugin('clipboard', 'read')).text
+  void unsafe
 
   // @ts-expect-error 舊的 handler 名稱已移除，方法在新名稱下
   await callPlugin('clipboard', 'clipboard_read')

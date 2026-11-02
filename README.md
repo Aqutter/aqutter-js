@@ -4,7 +4,7 @@ Aqutter 殼的網頁端 client：框架中立（不依賴 Nuxt / Vite 等），�
 
 - `isFlutter()`、`callFlutter(handler, payload)`、`onFlutterEvent(channel, listener)`：呼叫殼內建 handler、訂閱事件
 - `isBridgeSupported(handler)`：本平台是否真的做得到
-- Plugin API：`callPlugin`、`onPluginEvent`、`isPluginSupported`（型別由各 plugin 併入 `AqutterPluginRegistry`）
+- Plugin API：`callPlugin`、`onPluginEvent`、`isPluginSupported`（型別由各 plugin 併入 `AqutterPluginRegistry`）。`callPlugin` 在 plugin 用不了（平台不支援、App 沒裝、不在 Flutter 內）時回 `undefined` 而不是拋錯，回傳型別為 `Res | undefined`；開發階段（`setBridgeCapabilities(names, { dev })`）在 console 警告一次，正式版安靜
 - 傳輸：呼叫與事件走**同一條**多工本機連線（`/channel/aqutter.rpc`），酬載可直接帶 `ArrayBuffer`／`Uint8Array`，不需 base64（超過 64 MiB 自動分段，單次上限 512 MiB）；連線中斷自動重連，`onTransportState` 看狀態；網頁 CSP 需允許 `connect-src ws://127.0.0.1:*`
 - Native view 鏡像：`import '@aqutter/aqutter/native'` 註冊 `<aqutter-native>`，或用 `AqutterNative` 自行繪製（見 [Aqutter 文件的 nativeview](https://github.com/Aqutter/aqutter/blob/main/docs/nativeview.md)）
 - `@aqutter/aqutter/contract`：handler / 事件名稱與 payload 型別（與 `shell` 的 `bridge_names.dart` 成對）

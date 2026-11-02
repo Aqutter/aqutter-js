@@ -1,7 +1,7 @@
 # 殼內建能力
 
 ## Summary
-殼內建的剪貼簿（文字與圖片）、系統分享、本機通知與深層連結四組能力，在網頁端是四個內建 plugin（`clipboard`、`share`、`notification`、`deeplink`），用一般 plugin 的 `callPlugin`、`onPluginEvent`、`isPluginSupported` 呼叫並有完整型別，不新增執行期程式碼。方法名稱為 `<id>.<method>`、事件為 `<id>.<event>`，必須與殼的 plugin 逐字相同；不支援的平台不會列入能力表，網頁先確認再呼叫。契約正本在殼的 repo。
+殼內建的剪貼簿（文字與圖片）、系統分享、本機通知與深層連結四組能力，在網頁端是四個內建 plugin（`clipboard`、`share`、`notification`、`deeplink`），用一般 plugin 的 `callPlugin`、`onPluginEvent`、`isPluginSupported` 呼叫並有完整型別，不新增執行期程式碼。方法名稱為 `<id>.<method>`、事件為 `<id>.<event>`，必須與殼的 plugin 逐字相同；不支援的平台不會列入能力表；用不了的呼叫回 undefined 而不是拋錯（開發階段警告一次），所以呼叫端要處理 undefined。契約正本在殼的 repo。
 
 ## 運作方式
 
@@ -71,7 +71,8 @@
 |---|---|
 | 名稱成對 | plugin id、方法與事件名必須與殼的內建 plugin 逐字相同，只改一邊就是錯 |
 | 保留 id | `clipboard`、`share`、`notification`、`deeplink` 是內建 plugin id，使用者 plugin 不得同名 |
-| 先判斷支援 | 不支援的平台不列入能力表（`isPluginSupported` 回 false），呼叫會得到不支援平台的錯誤；能力表尚未取得時視為支援 |
+| 先判斷支援 | 不支援的平台不列入能力表（`isPluginSupported` 回 false）；能力表尚未取得時視為支援 |
+| 用不了不報錯 | 不支援的平台、App 沒裝該 plugin、不在 Flutter 內時，呼叫回 undefined 而不是拋錯，回傳型別因此含 undefined，呼叫端必須處理；開發階段在 console 警告一次，正式版完全安靜。plugin 自己的錯誤碼與傳輸錯誤仍照常拋出 |
 | 通知權限 | 通知方法不會自己彈授權視窗，網頁先用既有權限 handler 取得權限，否則回 permission_denied |
 | 排程精度 | 以絕對時間點排程，系統可能延後數分鐘；排程時間必須晚於現在，否則回 invalid_argument |
 | 分享限制 | 文字、網址、主旨各 ≤ 10,000 字；檔案最多 5 個、各 ≤ 5,242,880 位元組 |

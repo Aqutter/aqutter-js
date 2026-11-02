@@ -16,7 +16,7 @@ declare module '../src/index' {
 
 export const check = async (): Promise<void> => {
   const r = await callPlugin('demo', 'ping', { n: 1 })
-  const pong: number = r.pong
+  const pong: number | undefined = r?.pong
   await callPlugin('demo', 'reset')
   onPluginEvent('demo', 'changed', (payload) => {
     const level: number = payload.level

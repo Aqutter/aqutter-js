@@ -19,4 +19,10 @@ export interface PlatformInfo {
    * 舊版 host 不回傳此欄位，故為 optional；缺少時視為「全部支援」（見 isBridgeSupported）。
    */
   capabilities?: string[]
+  /**
+   * 殼是否在開發階段（連 dev server 或 debug 建置）。
+   * 傳給 `setBridgeCapabilities(names, { dev })`：為 `true` 時，被略過的 plugin 呼叫會在 console 警告一次；
+   * 舊版 host 不回傳此欄位，視為 `false`（完全安靜）。
+   */
+  dev?: boolean
 }

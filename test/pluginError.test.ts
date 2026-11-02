@@ -71,15 +71,15 @@ describe('public API over the transport', () => {
     await expect(call).resolves.toBeNull()
   })
 
-  it('an err frame becomes an AqutterPluginError with the code', async () => {
+  it('an err frame from the plugin becomes an AqutterPluginError with the code', async () => {
     const { callPluginRaw, AqutterPluginError } = await load()
     const call = callPluginRaw('maps', 'moveTo')
     const socket = await connected()
-    reply(socket, { t: 'err', id: socket.sent[0]!.id!, e: { code: 'UNSUPPORTED_PLATFORM', message: 'maps.moveTo is not supported on linux' } })
+    reply(socket, { t: 'err', id: socket.sent[0]!.id!, e: { code: 'invalid_path', message: 'bad path' } })
     const error = await call.catch((e: unknown) => e)
     expect(error).toBeInstanceOf(AqutterPluginError)
-    expect((error as AqutterPluginError).code).toBe('UNSUPPORTED_PLATFORM')
-    expect((error as Error).message).toBe('UNSUPPORTED_PLATFORM: maps.moveTo is not supported on linux')
+    expect((error as AqutterPluginError).code).toBe('invalid_path')
+    expect((error as Error).message).toBe('invalid_path: bad path')
   })
 
   it('callFlutter sends every handler over the transport, and there is no callHandler path', async () => {
@@ -114,10 +114,10 @@ describe('public API over the transport', () => {
     expect(getTransportState()).toBe('closed')
   })
 
-  it('outside Flutter calls throw and the transport is always closed', async () => {
+  it('outside Flutter a plugin call resolves to undefined and the transport is always closed', async () => {
     const { callPluginRaw, getTransportState, onTransportState } = await load()
     vi.stubGlobal('window', {})
-    await expect(callPluginRaw('maps', 'moveTo')).rejects.toThrow(/only available inside Flutter/)
+    await expect(callPluginRaw('maps', 'moveTo')).resolves.toBeUndefined()
     expect(getTransportState()).toBe('closed')
     expect(onTransportState(() => {})).toBeTypeOf('function')
   })
