@@ -11,7 +11,6 @@
 import type { ScreenOrientation } from './models/screenOrientation'
 import type { AppKey } from './models/key'
 import type { PermissionStatus, PermissionType } from './models/permission'
-import type { FilePickerMode, FilePickerOptions } from './models/filePicker'
 
 /** JS→原生：handler 名稱（全部經多工連線送出）。 */
 export enum BridgeHandler {
@@ -80,13 +79,6 @@ export enum BridgeHandler {
   IabOpen = 'iab_open',
   /** 關閉 In-App Browser。 */
   IabClose = 'iab_close',
-
-  /**
-   * 檔案 / 資料夾選擇。
-   *
-   * @deprecated 改用 `file-manager` plugin 的 `fileManager.pick`（一次性選檔，回傳唯讀的 `picked:<編號>`）；殼內建的 `picker_pick` 會在之後的版本移除。
-   */
-  PickerPick = 'picker_pick',
 
   /** 原生 HTTP 發送（繞開 WebView CORS）。 */
   HttpFetch = 'http_fetch',
@@ -437,25 +429,6 @@ export interface PermissionRequest {
 /** 權限狀態回應。 */
 export interface PermissionResponse {
   status: PermissionStatus
-}
-
-/**
- * 檔案 / 資料夾選擇請求。
- *
- * @deprecated 改用 `file-manager` plugin 的 `fileManager.pick`（一次性選檔，回傳唯讀的 `picked:<編號>`）；殼內建的 `picker_pick` 會在之後的版本移除。
- */
-export interface PickerRequest {
-  mode: FilePickerMode
-  options?: FilePickerOptions
-}
-
-/**
- * 檔案選擇結果；取消為空陣列。
- *
- * @deprecated 改用 `file-manager` plugin 的 `fileManager.pick`（一次性選檔，回傳唯讀的 `picked:<編號>`）；殼內建的 `picker_pick` 會在之後的版本移除。
- */
-export interface PickerResponse {
-  paths: string[]
 }
 
 /** 建立 TCP 連線。 */

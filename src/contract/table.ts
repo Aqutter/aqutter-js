@@ -55,8 +55,6 @@ import type {
   OrientationLockRequest,
   PermissionRequest,
   PermissionResponse,
-  PickerRequest,
-  PickerResponse,
   StatusBarImmersiveRequest,
   StoreGetRequest,
   StoreGetResponse,
@@ -136,7 +134,6 @@ export type BridgeContract = {
   [BridgeHandler.IabOpen]: { req: OpenUrlRequest, res: OkResponse }
   [BridgeHandler.IabClose]: { req: NoPayload, res: OkResponse }
 
-  [BridgeHandler.PickerPick]: { req: PickerRequest, res: PickerResponse }
 
   [BridgeHandler.HttpFetch]: { req: HttpFetchRequest, res: HttpFetchResponse }
   [BridgeHandler.HttpAbort]: { req: HttpAbortRequest, res: OkResponse }
