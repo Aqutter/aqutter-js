@@ -1,4 +1,8 @@
-/** 檔案選擇模式。 */
+/**
+ * 檔案選擇模式。
+ *
+ * @deprecated 改用 `file-manager` plugin 的 `fileManager.pick`（一次性選檔，回傳唯讀的 `picked:<編號>`）；殼內建的 `picker_pick` 會在之後的版本移除。
+ */
 export enum FilePickerMode {
   /** 單一檔案。 */
   File = 'file',
@@ -8,7 +12,11 @@ export enum FilePickerMode {
   Directory = 'directory',
 }
 
-/** 檔案選擇選項（對應 Flutter file_picker）。 */
+/**
+ * 檔案選擇選項（對應 Flutter file_picker）。
+ *
+ * @deprecated 改用 `file-manager` plugin 的 `fileManager.pick`（一次性選檔，回傳唯讀的 `picked:<編號>`）；殼內建的 `picker_pick` 會在之後的版本移除。
+ */
 export interface FilePickerOptions {
   /** 允許的副檔名（不含點，如 ['pdf', 'png']）；未指定為不限。 */
   extensions?: string[]
