@@ -134,7 +134,6 @@ export type BridgeContract = {
   [BridgeHandler.IabOpen]: { req: OpenUrlRequest, res: OkResponse }
   [BridgeHandler.IabClose]: { req: NoPayload, res: OkResponse }
 
-
   [BridgeHandler.HttpFetch]: { req: HttpFetchRequest, res: HttpFetchResponse }
   [BridgeHandler.HttpAbort]: { req: HttpAbortRequest, res: OkResponse }
 

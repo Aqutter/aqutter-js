@@ -15,10 +15,10 @@
 
 export type GesturePhase = 'start' | 'update' | 'end'
 
-export type AqutterNativeGesture =
-  | { type: 'tap' | 'doubleTap' | 'longPress', x: number, y: number }
-  | { type: 'pan', phase: GesturePhase, x: number, y: number, dx: number, dy: number }
-  | { type: 'pinch', phase: GesturePhase, scale: number, x: number, y: number }
+export type AqutterNativeGesture
+  = | { type: 'tap' | 'doubleTap' | 'longPress', x: number, y: number }
+    | { type: 'pan', phase: GesturePhase, x: number, y: number, dx: number, dy: number }
+    | { type: 'pinch', phase: GesturePhase, scale: number, x: number, y: number }
 
 /** 單擊與雙擊的關係，見檔頭說明。 */
 export type DoubleTapMode = 'exclusive' | 'both' | 'off'

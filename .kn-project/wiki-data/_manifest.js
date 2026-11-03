@@ -1,13 +1,13 @@
-window.WIKI_MANIFEST={
-"title":"aqutter-js",
-"repoUrl":"https://github.com/Aqutter/aqutter-js",
-"repoBranch":"main",
-"appflow":null,
-"pages":[
-"index.md",
-"platform/builtin-capabilities.md",
-"platform/console-log.md",
-"platform/endpoint.md",
-"platform/transport.md",
-]
-};
+window.WIKI_MANIFEST = {
+  title: 'aqutter-js',
+  repoUrl: 'https://github.com/Aqutter/aqutter-js',
+  repoBranch: 'main',
+  appflow: null,
+  pages: [
+    'index.md',
+    'platform/builtin-capabilities.md',
+    'platform/console-log.md',
+    'platform/endpoint.md',
+    'platform/transport.md',
+  ],
+}

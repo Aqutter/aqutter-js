@@ -234,7 +234,6 @@ export interface PluginDefinition<
  * 已註冊契約的 plugin 表：殼內建的四個 plugin（剪貼簿、分享、本機通知、深層連結，見
  * {@link BuiltinPluginRegistry}）加上各 plugin 套件以 module augmentation 擴充的項目。
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AqutterPluginRegistry extends BuiltinPluginRegistry {}
 
 type RegistryId = keyof AqutterPluginRegistry & string
@@ -300,7 +299,7 @@ export const callPluginRaw = async (pluginId: string, method: string, payload?: 
 export const callPlugin = async <Id extends RegistryId, M extends keyof MethodsOf<Id> & string>(
   pluginId: Id,
   method: M,
-  ...[payload]: MethodsOf<Id>[M] extends { req: void } ? [] : [payload: MethodsOf<Id>[M] extends { req: infer R } ? R : never]
+  ...[payload]: MethodsOf<Id>[M] extends { req: undefined } ? [] : [payload: MethodsOf<Id>[M] extends { req: infer R } ? R : never]
 ): Promise<(MethodsOf<Id>[M] extends { res: infer R } ? R : never) | undefined> => {
   return await callPluginRaw(pluginId, method, payload) as (MethodsOf<Id>[M] extends { res: infer R } ? R : never) | undefined
 }

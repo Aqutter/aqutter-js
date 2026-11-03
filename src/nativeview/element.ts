@@ -141,7 +141,7 @@ const createElementClass = (): CustomElementConstructor => {
       this.mirror = new AqutterNative({
         session,
         canvas: this.canvas,
-      measure: () => ({ width: this.clientWidth, height: this.clientHeight, devicePixelRatio: window.devicePixelRatio || 1 }),
+        measure: () => ({ width: this.clientWidth, height: this.clientHeight, devicePixelRatio: window.devicePixelRatio || 1 }),
         onStatus: connected => this.dispatchEvent(new CustomEvent('aqutter-status', { detail: { connected } })),
         maxInFlight: this.readMaxInFlight(),
         onFrame: info => this.dispatchEvent(new CustomEvent('aqutter-frame', { detail: info })),
@@ -267,7 +267,9 @@ const createElementClass = (): CustomElementConstructor => {
       // 只有前者補成一次按下加放開；後者若也補，慢節奏連點的單擊會一個接一個被配成雙擊。
       let upAwaitingClick = false
       let lastUpAt = Number.NEGATIVE_INFINITY
-      canvas.addEventListener('pointerdown', () => { upAwaitingClick = false })
+      canvas.addEventListener('pointerdown', () => {
+        upAwaitingClick = false
+      })
       canvas.addEventListener('pointerup', (event) => {
         upAwaitingClick = true
         lastUpAt = event.timeStamp
@@ -317,7 +319,7 @@ const createElementClass = (): CustomElementConstructor => {
         }
       })
     }
-}
+  }
 
   return AqutterNativeElement
 }

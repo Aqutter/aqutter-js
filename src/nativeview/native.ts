@@ -14,11 +14,11 @@ export interface AqutterNativeEndpoint {
 export type AqutterNativeMessage = AqutterNativeGesture | AqutterNativePointer | { type: 'command', name: string, args?: unknown }
 
 /** 協定內部訊息：確認收幀、回報顯示尺寸。由本類別自動送出，不屬於 [AqutterNativeMessage]。 */
-type ControlMessage =
-  | { type: 'ack', seq: number }
-  | { type: 'resize', width: number, height: number, dpr: number }
-  | { type: 'visibility', visible: boolean }
-  | { type: 'config', maxInFlight: number | 'auto' }
+type ControlMessage
+  = | { type: 'ack', seq: number }
+    | { type: 'resize', width: number, height: number, dpr: number }
+    | { type: 'visibility', visible: boolean }
+    | { type: 'config', maxInFlight: number | 'auto' }
 
 /** 顯示尺寸（CSS 像素）與裝置像素比。 */
 export interface AqutterNativeViewportInfo {

@@ -8,7 +8,11 @@ const core = Object.values(BridgeHandler)
 
 const run = (names: string[]): BridgeNameMismatch | null => {
   let result: BridgeNameMismatch | null = null
-  setBridgeCapabilities(names, { onMismatch: (mismatch) => { result = mismatch } })
+  setBridgeCapabilities(names, {
+    onMismatch: (mismatch) => {
+      result = mismatch
+    },
+  })
   return result
 }
 

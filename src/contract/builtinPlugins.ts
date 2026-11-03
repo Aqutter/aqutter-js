@@ -39,11 +39,11 @@ import type {
 export type ClipboardPluginContract = PluginDefinition<
   {
     /** 讀取純文字；沒有文字時 `text` 為 null。 */
-    read: { req: void, res: ClipboardReadResponse }
+    read: { req: undefined, res: ClipboardReadResponse }
     /** 寫入純文字。 */
     write: { req: ClipboardWriteRequest, res: OkResponse }
     /** 讀取圖片（一律以 PNG 回傳）；超過 5,242,880 位元組以錯誤碼 `too_large` 失敗。 */
-    readImage: { req: void, res: ClipboardReadImageResponse }
+    readImage: { req: undefined, res: ClipboardReadImageResponse }
     /** 寫入圖片（PNG 或 JPEG）。 */
     writeImage: { req: ClipboardWriteImageRequest, res: OkResponse }
   },
@@ -67,7 +67,7 @@ export type NotificationPluginContract = PluginDefinition<
     /** 取消通知；省略 id 取消全部。 */
     cancel: { req: NotifyCancelRequest, res: OkResponse }
     /** 取得「點通知而冷啟 App」的資訊；否則兩者皆 null。 */
-    initial: { req: void, res: NotifyInitialResponse }
+    initial: { req: undefined, res: NotifyInitialResponse }
   },
   {
     /** App 執行中使用者點了通知。 */
@@ -79,7 +79,7 @@ export type NotificationPluginContract = PluginDefinition<
 export type DeeplinkPluginContract = PluginDefinition<
   {
     /** 取得啟動 App 的連結；同一程序內重複呼叫回傳相同值，沒有時 `url` 為 null。 */
-    initial: { req: void, res: DeeplinkInitialResponse }
+    initial: { req: undefined, res: DeeplinkInitialResponse }
   },
   {
     /** App 執行中收到新的連結；啟動 App 的那一個連結只由 `initial` 取得。網頁必須自行驗證連結再導航。 */
