@@ -2,6 +2,7 @@ import { AqutterNativeFormat, decodeAqutterNativeFrame, peekAqutterNativeSeq } f
 import { getEndpoint } from '../endpoint'
 import type { AqutterNativeFrame } from './frame'
 import type { AqutterNativeGesture } from './gestures'
+import type { AqutterNativeLayout } from './layout'
 import type { AqutterNativePointer } from './pointer'
 
 /** 原生端的連線資訊（殼注入的 `window.aqutterEndpoint`）。 */
@@ -13,9 +14,11 @@ export interface AqutterNativeEndpoint {
 /** 網頁 → 原生的訊息：語意手勢、原始指標事件，或自訂指令。 */
 export type AqutterNativeMessage = AqutterNativeGesture | AqutterNativePointer | { type: 'command', name: string, args?: unknown }
 
-/** 協定內部訊息：確認收幀、回報顯示尺寸。由本類別自動送出，不屬於 [AqutterNativeMessage]。 */
+/** 協定內部訊息：模式請求、元素矩形（穿透）、確認收幀、回報顯示尺寸。由本類別自動送出，不屬於 [AqutterNativeMessage]。 */
 type ControlMessage
-  = | { type: 'ack', seq: number }
+  = | { type: 'mode', request: AqutterNativeModeRequest, pageReady: boolean }
+    | AqutterNativeLayout
+    | { type: 'ack', seq: number }
     | { type: 'resize', width: number, height: number, dpr: number }
     | { type: 'visibility', visible: boolean }
     | { type: 'config', maxInFlight: number | 'auto' }
@@ -26,6 +29,26 @@ export interface AqutterNativeViewportInfo {
   height: number
   devicePixelRatio: number
 }
+
+/** 元素的 `mode` 屬性值，也是送給原生端的請求。 */
+export type AqutterNativeModeRequest = 'auto' | 'mirror' | 'passthrough'
+
+/** 實際生效的模式：鏡像（擷取後畫進 canvas）或穿透（原生內容畫在透明的 WebView 下面）。 */
+export type AqutterNativeEffectiveMode = 'mirror' | 'passthrough'
+
+/** 與請求不同時的原因；`no-reply` 是網頁端自己加的（舊版原生端不回覆，逾時退回鏡像）。 */
+export type AqutterNativeModeReason = 'unsupported-platform' | 'unsupported-widget' | 'page-not-ready' | 'transparent-failed' | 'no-reply'
+
+/** 模式協商的結果。 */
+export interface AqutterNativeModeInfo {
+  mode: AqutterNativeEffectiveMode
+  reason?: AqutterNativeModeReason
+}
+
+const MODE_REASONS: readonly AqutterNativeModeReason[] = ['unsupported-platform', 'unsupported-widget', 'page-not-ready', 'transparent-failed']
+
+/** 等原生端回覆 `mode` 的上限（毫秒）；逾時視為舊版原生端，退回鏡像。 */
+const DEFAULT_MODE_TIMEOUT_MS = 1000
 
 /** 顯示模式，對應 CSS `object-fit`。 */
 export type AqutterNativeFit = 'fill' | 'contain' | 'cover'
@@ -47,6 +70,17 @@ export interface AqutterNativeOptions {
   measure?: () => AqutterNativeViewportInfo | null
   /** 每個連線在途（已送出、未確認）的幀數上限（1 到 8）；省略用原生端的預設。1 沒有排隊、延遲最低但吞吐較低；`'auto'` 由原生端探測各值的實際幀率後自動選擇。 */
   maxInFlight?: number | 'auto'
+  /**
+   * 要向原生端請求的模式。提供後，每次連線的第一則訊息是 `{"type":"mode",...}`，原生端回覆實際生效的模式（[onMode]）；
+   * 省略時不協商，維持舊版行為（一律鏡像）。
+   */
+  mode?: AqutterNativeModeRequest
+  /** 頁面可不可以穿透（見 `detectPageReady`）；每次協商時呼叫一次。省略視為 `true`。 */
+  pageReady?: () => boolean
+  /** 模式確定時呼叫（每次連線一次）：原生端的回覆，或逾時退回鏡像（`reason: 'no-reply'`）。 */
+  onMode?: (info: AqutterNativeModeInfo) => void
+  /** 等 `mode` 回覆的上限（毫秒），預設 1000。 */
+  modeTimeoutMs?: number
   /** 每畫完一幀呼叫；`latencyMs` 為（網頁收到時間 − 原生送出時間），兩邊時鐘同機所以可信。 */
   onFrame?: (info: { width: number, height: number, bytes: number, latencyMs: number, drawMs: number }) => void
 }
@@ -99,6 +133,9 @@ export class AqutterNative {
   /** 連續「未曾打開就關閉」的次數；打開過即歸零。 */
   private failedConnects = 0
   private connectHintShown = false
+  /** 本次連線生效的模式；尚未協商（或沒有請求協商）為 null，行為等同鏡像。 */
+  private effectiveMode: AqutterNativeEffectiveMode | null = null
+  private modeTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly options: AqutterNativeOptions) {
     const context = options.canvas.getContext('2d')
@@ -106,6 +143,11 @@ export class AqutterNative {
       throw new Error('[aqutterNative] 2d canvas context is not available')
     }
     this.context = context
+  }
+
+  /** 本次連線生效的模式；尚未協商出結果時為 null。 */
+  get mode(): AqutterNativeEffectiveMode | null {
+    return this.effectiveMode
   }
 
   get connected(): boolean {
@@ -126,6 +168,7 @@ export class AqutterNative {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
+    this.clearModeTimer()
     this.pending = null
     this.socket?.close()
     this.socket = null
@@ -136,7 +179,14 @@ export class AqutterNative {
     return this.sendRaw(message)
   }
 
-  /** 重新量測並把顯示尺寸回報給原生端（尺寸沒變就不送）。元素大小改變時呼叫。 */
+  /** 穿透模式下回報元素矩形；不是穿透模式、或尚未連線時丟棄並回傳 false。 */
+  sendLayout(layout: AqutterNativeLayout): boolean {
+    if (this.effectiveMode !== 'passthrough') {
+      return false
+    }
+    return this.sendRaw(layout)
+  }
+
   /** 設定在途幀數上限；連線中隨時可改，重新連線時會補送。 */
   setMaxInFlight(limit: number | 'auto' | undefined): void {
     this.maxInFlight = limit
@@ -156,6 +206,7 @@ export class AqutterNative {
     }
   }
 
+  /** 重新量測並把顯示尺寸回報給原生端（尺寸沒變就不送）。元素大小改變時呼叫。 */
   reportSize(): void {
     const viewport = this.options.measure?.()
     if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
@@ -194,6 +245,50 @@ export class AqutterNative {
     }
     this.socket?.send(JSON.stringify(message))
     return true
+  }
+
+  private clearModeTimer(): void {
+    if (this.modeTimer !== null) {
+      clearTimeout(this.modeTimer)
+      this.modeTimer = null
+    }
+  }
+
+  /** 連線後的第一則訊息：請求模式並等回覆；逾時視為舊版原生端，退回鏡像。 */
+  private negotiateMode(request: AqutterNativeModeRequest): void {
+    this.sendRaw({ type: 'mode', request, pageReady: this.options.pageReady?.() ?? true })
+    this.clearModeTimer()
+    this.modeTimer = setTimeout(() => {
+      this.modeTimer = null
+      this.applyMode({ mode: 'mirror', reason: 'no-reply' })
+    }, this.options.modeTimeoutMs ?? DEFAULT_MODE_TIMEOUT_MS)
+  }
+
+  private applyMode(info: AqutterNativeModeInfo): void {
+    this.clearModeTimer()
+    this.effectiveMode = info.mode
+    if (info.mode === 'passthrough') {
+      // 穿透不收幀：丟掉協商完成前已經收到、還沒畫的幀
+      this.pending = null
+      this.awaitingPayload = null
+    }
+    this.options.onMode?.(info)
+  }
+
+  /** 原生端的文字訊息：目前只有 `mode` 的回覆；不認得的訊息忽略。 */
+  private handleText(text: string): void {
+    let message: { type?: unknown, mode?: unknown, reason?: unknown }
+    try {
+      message = JSON.parse(text)
+    }
+    catch {
+      return
+    }
+    if (message?.type !== 'mode' || (message.mode !== 'mirror' && message.mode !== 'passthrough')) {
+      return
+    }
+    const reason = MODE_REASONS.find(candidate => candidate === message.reason)
+    this.applyMode(reason ? { mode: message.mode, reason } : { mode: message.mode })
   }
 
   private scheduleReconnect(): void {
@@ -247,7 +342,13 @@ export class AqutterNative {
       this.lastReported = ''
       this.lastVisibleSent = null
       this.lastMaxInFlightSent = undefined
+      this.effectiveMode = null
+      this.clearModeTimer()
       this.options.onStatus?.(true)
+      // 模式請求必須是連線後的第一則訊息（原生端據此決定要不要擷取）
+      if (this.options.mode !== undefined) {
+        this.negotiateMode(this.options.mode)
+      }
       if (this.maxInFlight === undefined) {
         this.maxInFlight = this.options.maxInFlight
       }
@@ -262,13 +363,19 @@ export class AqutterNative {
       if (!opened) {
         this.noteConnectFailure(url)
       }
+      this.clearModeTimer()
+      this.effectiveMode = null
       this.pending = null
       this.awaitingPayload = null
       this.options.onStatus?.(false)
       this.scheduleReconnect()
     }
     socket.onmessage = (event) => {
-      if (!(event.data instanceof ArrayBuffer)) {
+      if (typeof event.data === 'string') {
+        this.handleText(event.data)
+        return
+      }
+      if (!(event.data instanceof ArrayBuffer) || this.effectiveMode === 'passthrough') {
         return
       }
       // 嚴格交替：標頭、像素、標頭、像素…

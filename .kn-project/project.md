@@ -1,12 +1,12 @@
 <!-- REMINDER: Relative Paths Only! No file:///c:/... -->
 # aqutter-js
 
-Aqutter 殼的網頁端 client：npm 套件 `@aqutter/aqutter`，框架中立（不依賴 Nuxt／Vite 等），提供 bridge 呼叫、事件訂閱（含殼內建的剪貼簿、分享、本機通知、深層連結四個內建 plugin 的型別）、plugin API、native view 鏡像與跨層契約型別。以 TypeScript 原始碼發佈，由使用端打包器編譯。詳見 [README.md](../README.md)；殼內建能力見 [wiki](wiki/platform/builtin-capabilities.md)。
+Aqutter 殼的網頁端 client：npm 套件 `@aqutter/aqutter`，框架中立（不依賴 Nuxt／Vite 等），提供 bridge 呼叫、事件訂閱（含殼內建的剪貼簿、分享、本機通知、深層連結四個內建 plugin 的型別）、plugin API、native view 鏡像與穿透與跨層契約型別。以 TypeScript 原始碼發佈，由使用端打包器編譯。詳見 [README.md](../README.md)；殼內建能力見 [wiki](wiki/platform/builtin-capabilities.md)。
 
 ## 保留鐵則
 
 - **跨語言名稱成對（跨 repo）**：handler／事件名稱在 `src/contract/bridge.ts`，對應 `Aqutter/aqutter` 的 `shell/lib/src/bridge/bridge_names.dart`；plugin 命名規則在 `src/index.ts`，對應 `shell/lib/src/plugin/aqutter_plugin.dart`；只改一邊就是錯。
-- **鏡像協定兩端成對**：`src/nativeview/{frame,gestures}.ts` 對應 `Aqutter/aqutter_core` 的 `native_frame.dart`。
+- **鏡像協定兩端成對**：`src/nativeview/{frame,gestures}.ts` 對應 `Aqutter/aqutter_core` 的 `native_frame.dart`；穿透的 `mode`／`layout` 訊息（`src/nativeview/{native,layout}.ts`）對應 core 的 `native_host_io.dart` 與 `native_mode.dart`。
 - **版本對應以 manifest 為準**：改動後要更新 `Aqutter/aqutter` 的 `manifest/releases.json` 的 `client.spec`（commit sha）。
 - **傳輸成對**：`src/frame.ts` 的訊框格式與 `Aqutter/aqutter_core` 的 `rpc_frame.dart` 成對，兩端以 `test/rpc_frame_vectors.json`（與 core 逐字相同）保持一致；連線路徑 `/channel/aqutter.rpc`。呼叫與事件都走這條連線；連線資訊（埠與令牌）由殼在頁面載入時注入 `window.aqutterEndpoint`（`src/endpoint.ts`，每次連線前重新讀取），client 不使用 `callHandler`。
 - **套件名不改**：`@aqutter/aqutter`。
