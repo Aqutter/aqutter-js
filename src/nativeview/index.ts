@@ -6,5 +6,7 @@ export { DEFAULT_GESTURE_OPTIONS, DOUBLE_TAP_GRACE_MS, GestureRecognizer, IOS_GE
 export type { GestureOptions, GesturePhase, AqutterNativeGesture, Scheduler } from './gestures'
 export { toPointerMessage } from './pointer'
 export type { AqutterNativePointer, AqutterNativePointerPhase, PointerLike } from './pointer'
+export { cssColorAlpha, detectPageReady, measureLayout, OPAQUE_ALPHA, trackLayout } from './layout'
+export type { AqutterLayoutTracker, AqutterNativeLayout } from './layout'
 export { AqutterNative } from './native'
-export type { AqutterNativeEndpoint, AqutterNativeFit, AqutterNativeMessage, AqutterNativeOptions, AqutterNativeViewportInfo } from './native'
+export type { AqutterNativeEffectiveMode, AqutterNativeEndpoint, AqutterNativeFit, AqutterNativeMessage, AqutterNativeModeInfo, AqutterNativeModeReason, AqutterNativeModeRequest, AqutterNativeOptions, AqutterNativeViewportInfo } from './native'

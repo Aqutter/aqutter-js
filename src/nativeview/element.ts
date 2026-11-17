@@ -1,9 +1,11 @@
 import { DEFAULT_GESTURE_OPTIONS, GestureRecognizer, IOS_GESTURE_OPTIONS, isIosTouch } from './gestures'
 import type { DoubleTapMode, GestureOptions } from './gestures'
+import { detectPageReady, trackLayout } from './layout'
+import type { AqutterLayoutTracker } from './layout'
 import { toPointerMessage } from './pointer'
 import type { AqutterNativePointerPhase } from './pointer'
 import { AqutterNative } from './native'
-import type { AqutterNativeFit, AqutterNativeMessage } from './native'
+import type { AqutterNativeEffectiveMode, AqutterNativeFit, AqutterNativeMessage, AqutterNativeModeInfo, AqutterNativeModeRequest } from './native'
 
 /** 預設的自訂元素標籤。 */
 export const AQUTTER_NATIVE_TAG = 'aqutter-native'
@@ -12,6 +14,9 @@ export const AQUTTER_NATIVE_TAG = 'aqutter-native'
 const PHANTOM_CLICK_MAX_MS = 250
 
 const FITS: readonly AqutterNativeFit[] = ['fill', 'contain', 'cover']
+
+/** `mode` 屬性：`auto`（預設）、`mirror`、`passthrough`。 */
+const MODES: readonly AqutterNativeModeRequest[] = ['auto', 'mirror', 'passthrough']
 
 /** `input` 屬性：回傳什麼輸入給原生端。`gestures` 語意手勢（預設）；`pointers` 原始指標事件；`both` 兩者。 */
 type InputMode = 'gestures' | 'pointers' | 'both'
@@ -32,6 +37,8 @@ export interface AqutterNativeElement extends HTMLElement {
   /** 送自訂指令（原生端 `AqutterNativeMessage.type == 'command'`）。 */
   sendCommand: (name: string, args?: unknown) => boolean
   readonly connected: boolean
+  /** 本次連線生效的模式；尚未協商出結果（或沒有連線）時為 `null`。 */
+  readonly effectiveMode: AqutterNativeEffectiveMode | null
 }
 
 /**
@@ -40,21 +47,28 @@ export interface AqutterNativeElement extends HTMLElement {
  */
 const createElementClass = (): CustomElementConstructor => {
   /**
-   * `<aqutter-native session="map" fit="cover">`：顯示原生端鏡像過來的畫面，並把手勢回傳。
+   * `<aqutter-native session="map" fit="cover">`：顯示原生端的內容，並把手勢回傳。
+   *
+   * 兩種顯示模式：**鏡像**（`mirror`）由原生端擷取畫面、傳過來畫進 canvas；**穿透**（`passthrough`）原生內容直接畫在
+   * 透明的 WebView 下面，元素只佔版面（不建立 canvas）、並把自己的矩形回報給原生端。兩種模式共用同一組手勢與事件。
    *
    * | 屬性 | 說明 |
    * |---|---|
    * | `session` | 與原生端 `AqutterNative.sessionId` 一致（必填） |
-   * | `fit` | `fill`（預設）/ `contain` / `cover`，對應 `object-fit` |
+   * | `mode` | `auto`（預設）/ `mirror` / `passthrough`。`auto`：平台支援、原生端允許、且頁面可穿透時用穿透，否則鏡像；`passthrough` 不偵測頁面條件（元素後方的祖先不可有不透明背景，由頁面作者負責）。不合法的值視為 `auto`。改屬性會重新連線並重新協商 |
+   * | `fit` | `fill`（預設）/ `contain` / `cover`，對應 `object-fit`（只在鏡像有意義） |
    *
    * 事件（`CustomEvent`，不冒泡）：`aqutter-status`（`detail.connected`）、`aqutter-frame`
-   * （`detail.width/height/bytes/latencyMs`）。方法：{@link send}、{@link sendCommand}。
+   * （`detail.width/height/bytes/latencyMs`，只在鏡像出現）、`aqutter-mode`（`detail.mode`、`detail.reason?`，
+   * 每次連線模式確定後一次）。方法：{@link send}、{@link sendCommand}。
    * 手勢訊息格式見 `AqutterNativeGesture`；元素只送出，不改變自身內容。
    */
   class AqutterNativeElement extends HTMLElement {
-    static readonly observedAttributes = ['session', 'fit', 'input', 'double-tap', 'double-tap-ms', 'double-tap-min-ms', 'double-tap-distance', 'slop', 'long-press-ms', 'max-in-flight']
+    static readonly observedAttributes = ['session', 'fit', 'input', 'double-tap', 'double-tap-ms', 'double-tap-min-ms', 'double-tap-distance', 'slop', 'long-press-ms', 'max-in-flight', 'mode']
 
     private canvas: HTMLCanvasElement | null = null
+    private layoutTracker: AqutterLayoutTracker | null = null
+    private warnedMode = false
     private mirror: AqutterNative | null = null
     private recognizer: GestureRecognizer | null = null
     /** 目前生效的手勢門檻（含屬性覆寫）；除錯、顯示用。 */
@@ -82,6 +96,8 @@ const createElementClass = (): CustomElementConstructor => {
       document.removeEventListener('visibilitychange', this.onVisibilityChange)
       this.touchReconcile?.abort()
       this.touchReconcile = null
+      this.layoutTracker?.stop()
+      this.layoutTracker = null
       this.mirror?.stop()
       this.mirror = null
     }
@@ -115,6 +131,49 @@ const createElementClass = (): CustomElementConstructor => {
       return this.mirror?.connected ?? false
     }
 
+    get effectiveMode(): AqutterNativeEffectiveMode | null {
+      return this.mirror?.mode ?? null
+    }
+
+    /** `mode` 屬性；沒設是 `auto`，不合法的值也視為 `auto`（警告一次）。 */
+    private readMode(): AqutterNativeModeRequest {
+      const value = this.getAttribute('mode')
+      if (value === null) {
+        return 'auto'
+      }
+      if (MODES.includes(value as AqutterNativeModeRequest)) {
+        return value as AqutterNativeModeRequest
+      }
+      if (!this.warnedMode) {
+        this.warnedMode = true
+        console.warn(`[aqutter-native] 不合法的 mode="${value}"，視為 "auto"（可用值：${MODES.join('、')}）`)
+      }
+      return 'auto'
+    }
+
+    /**
+     * 模式確定（每次連線一次）：穿透時拿掉 canvas、開始回報矩形；鏡像時放回 canvas、停止回報。
+     * 重新連線會重新協商，所以原生端不認得舊狀態時也會重送矩形。
+     */
+    private onModeResolved(info: AqutterNativeModeInfo): void {
+      this.layoutTracker?.stop()
+      this.layoutTracker = null
+      if (info.mode === 'passthrough') {
+        this.canvas?.remove()
+        this.layoutTracker = trackLayout(this, layout => this.mirror?.sendLayout(layout) ?? false)
+      }
+      else {
+        this.attachCanvas()
+      }
+      this.dispatchEvent(new CustomEvent('aqutter-mode', { detail: info }))
+    }
+
+    private attachCanvas(): void {
+      if (this.canvas && !this.canvas.isConnected) {
+        this.shadowRoot?.append(this.canvas)
+      }
+    }
+
     private applyFit(): void {
       const fit = this.getAttribute('fit') as AqutterNativeFit | null
       if (this.canvas) {
@@ -134,13 +193,19 @@ const createElementClass = (): CustomElementConstructor => {
     private restart(): void {
       this.mirror?.stop()
       this.mirror = null
+      this.layoutTracker?.stop()
+      this.layoutTracker = null
       const session = this.getAttribute('session')
       if (!session || !this.canvas) {
         return
       }
+      this.attachCanvas()
       this.mirror = new AqutterNative({
         session,
         canvas: this.canvas,
+        mode: this.readMode(),
+        pageReady: () => detectPageReady(this),
+        onMode: info => this.onModeResolved(info),
         measure: () => ({ width: this.clientWidth, height: this.clientHeight, devicePixelRatio: window.devicePixelRatio || 1 }),
         onStatus: connected => this.dispatchEvent(new CustomEvent('aqutter-status', { detail: { connected } })),
         maxInFlight: this.readMaxInFlight(),
@@ -180,10 +245,7 @@ const createElementClass = (): CustomElementConstructor => {
     }
 
     private bindPointers(): void {
-      const canvas = this.canvas
-      if (!canvas) {
-        return
-      }
+      // 事件與尺寸都以宿主元素為準：鏡像時 canvas 填滿宿主，行為不變；穿透時沒有 canvas，宿主就是整個互動區
       const number = (attribute: string, fallback: number): number => {
         const value = Number(this.getAttribute(attribute))
         return this.hasAttribute(attribute) && Number.isFinite(value) && value > 0 ? value : fallback
@@ -206,11 +268,11 @@ const createElementClass = (): CustomElementConstructor => {
       this.gestureOptions = options
       this.recognizer = new GestureRecognizer(
         gesture => this.send(gesture),
-        () => ({ width: canvas.clientWidth, height: canvas.clientHeight }),
+        () => ({ width: this.clientWidth, height: this.clientHeight }),
         options,
       )
       const local = (event: PointerEvent): { x: number, y: number } => {
-        const rect = canvas.getBoundingClientRect()
+        const rect = this.getBoundingClientRect()
         return { x: event.clientX - rect.left, y: event.clientY - rect.top }
       }
       const mode = (): InputMode => {
@@ -222,14 +284,14 @@ const createElementClass = (): CustomElementConstructor => {
       /** 正在按下的指標；只轉送按著的移動，滑鼠游標的懸停不送。 */
       const pressed = new Set<number>()
       const sendPointer = (phase: AqutterNativePointerPhase, event: PointerEvent): void => {
-        const rect = canvas.getBoundingClientRect()
-        this.send(toPointerMessage(phase, event, rect, { width: canvas.clientWidth, height: canvas.clientHeight }))
+        const rect = this.getBoundingClientRect()
+        this.send(toPointerMessage(phase, event, rect, { width: this.clientWidth, height: this.clientHeight }))
       }
-      canvas.addEventListener('pointerdown', (event) => {
+      this.addEventListener('pointerdown', (event) => {
         try {
           // 觸控的指標本來就隱含捕捉；iOS 上多做一次顯式捕捉，快速連點的第二下會變成只有 click、沒有 pointer／touch 事件
           if (event.pointerType !== 'touch') {
-            canvas.setPointerCapture(event.pointerId)
+            this.setPointerCapture(event.pointerId)
           }
         }
         catch {
@@ -243,7 +305,7 @@ const createElementClass = (): CustomElementConstructor => {
           this.recognizer?.pointerDown(event.pointerId, local(event), event.timeStamp)
         }
       })
-      canvas.addEventListener('pointermove', (event) => {
+      this.addEventListener('pointermove', (event) => {
         if (wantsPointers() && pressed.has(event.pointerId)) {
           sendPointer('move', event)
         }
@@ -251,7 +313,7 @@ const createElementClass = (): CustomElementConstructor => {
           this.recognizer?.pointerMove(event.pointerId, local(event))
         }
       })
-      canvas.addEventListener('pointerup', (event) => {
+      this.addEventListener('pointerup', (event) => {
         if (wantsPointers() && pressed.delete(event.pointerId)) {
           sendPointer('up', event)
         }
@@ -267,14 +329,14 @@ const createElementClass = (): CustomElementConstructor => {
       // 只有前者補成一次按下加放開；後者若也補，慢節奏連點的單擊會一個接一個被配成雙擊。
       let upAwaitingClick = false
       let lastUpAt = Number.NEGATIVE_INFINITY
-      canvas.addEventListener('pointerdown', () => {
+      this.addEventListener('pointerdown', () => {
         upAwaitingClick = false
       })
-      canvas.addEventListener('pointerup', (event) => {
+      this.addEventListener('pointerup', (event) => {
         upAwaitingClick = true
         lastUpAt = event.timeStamp
       })
-      canvas.addEventListener('click', (event) => {
+      this.addEventListener('click', (event) => {
         if (upAwaitingClick) {
           upAwaitingClick = false
           return
@@ -309,7 +371,7 @@ const createElementClass = (): CustomElementConstructor => {
       const { signal } = this.touchReconcile
       document.addEventListener('touchend', reconcile, { passive: true, signal })
       document.addEventListener('touchcancel', reconcile, { passive: true, signal })
-      canvas.addEventListener('pointercancel', (event) => {
+      this.addEventListener('pointercancel', (event) => {
         if (wantsPointers() && pressed.delete(event.pointerId)) {
           sendPointer('cancel', event)
         }

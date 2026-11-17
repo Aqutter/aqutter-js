@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AQUTTER_NATIVE_HEADER_LENGTH, AqutterNative, AqutterNativeFormat } from '../src/nativeview'
+import type { AqutterNativeLayout, AqutterNativeModeInfo, AqutterNativeOptions } from '../src/nativeview'
 
 interface TestFrame { header: ArrayBuffer, payload: ArrayBuffer }
 
@@ -39,7 +40,7 @@ class FakeSocket {
     this.readyState = 3
   }
 
-  receive(data: ArrayBuffer): void {
+  receive(data: ArrayBuffer | string): void {
     this.onmessage?.({ data })
   }
 
@@ -56,7 +57,7 @@ class FakeSocket {
 
 interface PutCall { data: Uint8ClampedArray, width: number, height: number }
 
-const setup = () => {
+const setup = (extra: Partial<AqutterNativeOptions> = {}) => {
   const puts: PutCall[] = []
   const drawn: unknown[] = []
   const context = {
@@ -75,6 +76,7 @@ const setup = () => {
     canvas,
     resolveEndpoint: async () => ({ port: 1234, token: 't' }),
     measure: () => measured,
+    ...extra,
   })
   native.start()
   return {
@@ -246,5 +248,128 @@ describe('AqutterNative connection failure hint', () => {
     await closeNext()
     expect(warn).not.toHaveBeenCalled()
     warn.mockRestore()
+  })
+})
+
+describe('AqutterNative mode negotiation', () => {
+  beforeEach(() => {
+    FakeSocket.instances = []
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  const layout = (extra: Partial<AqutterNativeLayout> = {}): AqutterNativeLayout => ({ type: 'layout', left: 1, top: 2, width: 3, height: 4, visible: true, sentAt: 5, ...extra })
+
+  it('sends the mode request as the very first message, with pageReady', async () => {
+    const { socket } = setup({ mode: 'auto', pageReady: () => false, maxInFlight: 2 })
+    const ws = await socket()
+    expect(ws.messages[0]).toEqual({ type: 'mode', request: 'auto', pageReady: false })
+    expect(ws.messages.slice(1).map(message => message.type)).toEqual(['config', 'resize', 'visibility'])
+  })
+
+  it('does not negotiate without a mode option and keeps the old mirror behavior', async () => {
+    const { socket, puts, flush, native } = setup()
+    const ws = await socket()
+    expect(ws.messages.some(message => message.type === 'mode')).toBe(false)
+    ws.receiveFrame(makeFrame(1))
+    flush()
+    expect(puts).toHaveLength(1)
+    expect(native.mode).toBeNull()
+  })
+
+  it('treats a passthrough reply as the mode: no frames are drawn or acknowledged, layout can be sent', async () => {
+    const infos: AqutterNativeModeInfo[] = []
+    const { socket, puts, flush, native } = setup({ mode: 'auto', onMode: info => infos.push(info) })
+    const ws = await socket()
+    expect(native.sendLayout(layout())).toBe(false)
+    ws.receive(JSON.stringify({ type: 'mode', mode: 'passthrough' }))
+    expect(infos).toEqual([{ mode: 'passthrough' }])
+    expect(native.mode).toBe('passthrough')
+
+    const acksBefore = ws.messages.filter(message => message.type === 'ack').length
+    ws.receiveFrame(makeFrame(1))
+    flush()
+    expect(puts).toHaveLength(0)
+    expect(ws.messages.filter(message => message.type === 'ack')).toHaveLength(acksBefore)
+
+    expect(native.sendLayout(layout())).toBe(true)
+    expect(ws.messages.at(-1)).toEqual(layout())
+  })
+
+  it('drops a frame that was received before the passthrough reply', async () => {
+    const { socket, puts, flush } = setup({ mode: 'auto' })
+    const ws = await socket()
+    ws.receiveFrame(makeFrame(1))
+    ws.receive(JSON.stringify({ type: 'mode', mode: 'passthrough' }))
+    flush()
+    expect(puts).toHaveLength(0)
+  })
+
+  it('keeps drawing frames when the reply is mirror, and reports a known reason', async () => {
+    const infos: AqutterNativeModeInfo[] = []
+    const { socket, puts, flush, native } = setup({ mode: 'passthrough', onMode: info => infos.push(info) })
+    const ws = await socket()
+    ws.receive(JSON.stringify({ type: 'mode', mode: 'mirror', reason: 'unsupported-platform' }))
+    expect(infos).toEqual([{ mode: 'mirror', reason: 'unsupported-platform' }])
+    ws.receiveFrame(makeFrame(1))
+    flush()
+    expect(puts).toHaveLength(1)
+    expect(native.sendLayout(layout())).toBe(false)
+  })
+
+  it('drops an unknown reason and ignores malformed or unrelated text messages', async () => {
+    const infos: AqutterNativeModeInfo[] = []
+    const { socket } = setup({ mode: 'auto', onMode: info => infos.push(info) })
+    const ws = await socket()
+    ws.receive('not json')
+    ws.receive(JSON.stringify({ type: 'other' }))
+    ws.receive(JSON.stringify({ type: 'mode', mode: 'weird' }))
+    expect(infos).toEqual([])
+    ws.receive(JSON.stringify({ type: 'mode', mode: 'mirror', reason: 'made-up' }))
+    expect(infos).toEqual([{ mode: 'mirror' }])
+  })
+
+  it('falls back to mirror with reason no-reply when the native side never answers (old native)', async () => {
+    vi.useFakeTimers()
+    const infos: AqutterNativeModeInfo[] = []
+    const { socket, puts, flush, native } = setup({ mode: 'auto', modeTimeoutMs: 1000, onMode: info => infos.push(info) })
+    const ws = await socket()
+    vi.advanceTimersByTime(999)
+    expect(infos).toEqual([])
+    vi.advanceTimersByTime(1)
+    expect(infos).toEqual([{ mode: 'mirror', reason: 'no-reply' }])
+    expect(native.mode).toBe('mirror')
+    ws.receiveFrame(makeFrame(1))
+    flush()
+    expect(puts).toHaveLength(1)
+  })
+
+  it('a reply cancels the timeout', async () => {
+    vi.useFakeTimers()
+    const infos: AqutterNativeModeInfo[] = []
+    const { socket } = setup({ mode: 'auto', onMode: info => infos.push(info) })
+    const ws = await socket()
+    ws.receive(JSON.stringify({ type: 'mode', mode: 'passthrough' }))
+    vi.advanceTimersByTime(5000)
+    expect(infos).toEqual([{ mode: 'passthrough' }])
+  })
+
+  it('renegotiates on every new connection and forgets the previous mode', async () => {
+    vi.useFakeTimers()
+    const { socket, native } = setup({ mode: 'auto', reconnectMs: 10 })
+    const first = await socket()
+    first.receive(JSON.stringify({ type: 'mode', mode: 'passthrough' }))
+    expect(native.mode).toBe('passthrough')
+
+    first.readyState = 3
+    first.onclose?.()
+    expect(native.mode).toBeNull()
+    await vi.advanceTimersByTimeAsync(20)
+    const second = FakeSocket.instances.at(-1) as FakeSocket
+    expect(second).not.toBe(first)
+    second.onopen?.()
+    expect(second.messages[0]).toMatchObject({ type: 'mode', request: 'auto' })
   })
 })

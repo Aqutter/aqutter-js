@@ -152,6 +152,10 @@
 - **[程式碼風格]** 實作遵守 `kn-project-code-style`。
 - **[契約]** rev 1 凍結（核准日 2026-11-17）。
 - **[契約變更]** rev 1 → rev 2（已核准）：child 一律保持掛載，穿透時第一則可見 layout 前以 `Offstage` 隱藏（契約 §4、§6）；只影響 aqutter_core 的實作，本 repo 只同步契約文字。
+- **[實作]** 手勢事件改綁在宿主元素（`this`）而不是 canvas：鏡像時 canvas 填滿宿主、行為不變；穿透時沒有 canvas，宿主就是互動區。穿透時把 canvas 從 shadow DOM 拿掉（鏡像時放回），`AqutterNative` 保留 canvas 參考。
+- **[實作]** `AqutterNative`（類別）只有提供 `mode` 選項才協商，省略時維持舊行為；元素一律提供。逾時退回鏡像的原因 `no-reply` 只存在網頁端（契約 §3 的「無回覆」列）。
+- **[驗證]** Android 實機（ASUS，API 33）以 core 的修正＋本計畫的網頁端＋**未修改**的 google-maps plugin：預設 `auto` 協商成穿透、`mode="mirror"` 換成 canvas 鏡像、再改回 `passthrough` 換回，三種狀態的 `effectiveMode`、canvas 有無與畫面都符合。
+- **[未做]** `docs/nativeview.md`（本 repo）沒有補穿透模式章節：不在 `## Impact Files`，補的話需先補列並重新核准；目前由元素的 JSDoc 與 core 的 `doc/nativeview.md` 說明。
 - **[完成後]** commit + 開 PR（Rule 12 非互動鏈；完成前自動 fetch 後 rebase origin/main 並 push --force-with-lease --force-if-includes）。
 - **[執行模式]** 序列（依據：環境只有單一 agent，沒有獨立子 agent）；順序 aqutter_core → aqutter-js → aqutter → aqutter-plugins。
 - **[範圍]** 使用者指示「先定契約」：本次先把契約凍結、建立 issue 與分支並提交計畫，實作（`tasks.md` 的 Phase 1 起）等使用者確認後再開始。
