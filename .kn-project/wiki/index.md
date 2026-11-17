@@ -7,6 +7,7 @@
 - [殼內建能力](platform/builtin-capabilities.md)
 - [主控台日誌](platform/console-log.md)
 - [連線資訊](platform/endpoint.md)
+- [原生內容元素](platform/native-element.md)
 - [統一傳輸](platform/transport.md)
 
 ---
