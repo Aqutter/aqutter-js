@@ -1,6 +1,8 @@
 import { DEFAULT_GESTURE_OPTIONS, GestureRecognizer, IOS_GESTURE_OPTIONS, isIosTouch } from './gestures'
 import type { DoubleTapMode, GestureOptions } from './gestures'
 import { detectPageReady, trackLayout } from './layout'
+import { startSeeThrough } from './seeThrough'
+import type { AqutterSeeThrough } from './seeThrough'
 import type { AqutterLayoutTracker } from './layout'
 import { toPointerMessage } from './pointer'
 import type { AqutterNativePointerPhase } from './pointer'
@@ -55,7 +57,8 @@ const createElementClass = (): CustomElementConstructor => {
    * | 屬性 | 說明 |
    * |---|---|
    * | `session` | 與原生端 `AqutterNative.sessionId` 一致（必填） |
-   * | `mode` | `auto`（預設）/ `mirror` / `passthrough`。`auto`：平台支援、原生端允許、且頁面可穿透時用穿透，否則鏡像；`passthrough` 不偵測頁面條件（元素後方的祖先不可有不透明背景，由頁面作者負責）。不合法的值視為 `auto`。改屬性會重新連線並重新協商 |
+   * | `mode` | `auto`（預設）/ `mirror` / `passthrough`。`auto`：平台支援、原生端允許、且頁面可穿透時用穿透，否則鏡像；`passthrough` 不偵測頁面條件。穿透時元素會自動讓出後方的頁面背景（祖先的不透明背景暫時透明、標了 `data-aqutter-bg` 的底層背景層在元素位置挖洞，離開穿透還原）。不合法的值視為 `auto`。改屬性會重新連線並重新協商 |
+   * | `keep-background` | 有這個屬性時不自動讓出頁面背景，`auto` 也改回偵測祖先背景；頁面自己負責 |
    * | `fit` | `fill`（預設）/ `contain` / `cover`，對應 `object-fit`（只在鏡像有意義） |
    *
    * 事件（`CustomEvent`，不冒泡）：`aqutter-status`（`detail.connected`）、`aqutter-frame`
@@ -64,10 +67,11 @@ const createElementClass = (): CustomElementConstructor => {
    * 手勢訊息格式見 `AqutterNativeGesture`；元素只送出，不改變自身內容。
    */
   class AqutterNativeElement extends HTMLElement {
-    static readonly observedAttributes = ['session', 'fit', 'input', 'double-tap', 'double-tap-ms', 'double-tap-min-ms', 'double-tap-distance', 'slop', 'long-press-ms', 'max-in-flight', 'mode']
+    static readonly observedAttributes = ['session', 'fit', 'input', 'double-tap', 'double-tap-ms', 'double-tap-min-ms', 'double-tap-distance', 'slop', 'long-press-ms', 'max-in-flight', 'mode', 'keep-background']
 
     private canvas: HTMLCanvasElement | null = null
     private layoutTracker: AqutterLayoutTracker | null = null
+    private seeThrough: AqutterSeeThrough | null = null
     private warnedMode = false
     private mirror: AqutterNative | null = null
     private recognizer: GestureRecognizer | null = null
@@ -98,6 +102,8 @@ const createElementClass = (): CustomElementConstructor => {
       this.touchReconcile = null
       this.layoutTracker?.stop()
       this.layoutTracker = null
+      this.seeThrough?.stop()
+      this.seeThrough = null
       this.mirror?.stop()
       this.mirror = null
     }
@@ -158,9 +164,17 @@ const createElementClass = (): CustomElementConstructor => {
     private onModeResolved(info: AqutterNativeModeInfo): void {
       this.layoutTracker?.stop()
       this.layoutTracker = null
+      this.seeThrough?.stop()
+      this.seeThrough = null
       if (info.mode === 'passthrough') {
         this.canvas?.remove()
-        this.layoutTracker = trackLayout(this, layout => this.mirror?.sendLayout(layout) ?? false)
+        // 頁面背景自動讓開（祖先透明、標記層挖洞），退回鏡像或移除時還原；`keep-background` 時由頁面自己負責
+        const seeThrough = this.hasAttribute('keep-background') ? null : startSeeThrough(this)
+        this.seeThrough = seeThrough
+        this.layoutTracker = trackLayout(this, (layout) => {
+          seeThrough?.update(layout)
+          return this.mirror?.sendLayout(layout) ?? false
+        })
       }
       else {
         this.attachCanvas()
@@ -195,6 +209,8 @@ const createElementClass = (): CustomElementConstructor => {
       this.mirror = null
       this.layoutTracker?.stop()
       this.layoutTracker = null
+      this.seeThrough?.stop()
+      this.seeThrough = null
       const session = this.getAttribute('session')
       if (!session || !this.canvas) {
         return
@@ -204,7 +220,8 @@ const createElementClass = (): CustomElementConstructor => {
         session,
         canvas: this.canvas,
         mode: this.readMode(),
-        pageReady: () => detectPageReady(this),
+        // 預設會在穿透時自動讓開祖先的背景，所以不再因為祖先背景判為不可穿透；`keep-background` 時才偵測
+        pageReady: () => !this.hasAttribute('keep-background') || detectPageReady(this),
         onMode: info => this.onModeResolved(info),
         measure: () => ({ width: this.clientWidth, height: this.clientHeight, devicePixelRatio: window.devicePixelRatio || 1 }),
         onStatus: connected => this.dispatchEvent(new CustomEvent('aqutter-status', { detail: { connected } })),

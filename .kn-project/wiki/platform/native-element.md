@@ -1,7 +1,7 @@
 # 原生內容元素
 
 ## Summary
-`<aqutter-native>` 把殼裡的原生內容（例如地圖）放進網頁：元素佔版面，並把網頁的手勢回傳給原生端。顯示有兩種模式：鏡像由原生端擷取畫面、傳到元素裡的畫布；穿透讓原生內容直接畫在透明的 WebView 下面，元素只回報自己的位置與大小。`mode` 屬性選擇（預設 `auto`），兩種模式共用同一組手勢與事件，模式由原生端在每次連線時決定。
+`<aqutter-native>` 把殼裡的原生內容（例如地圖）放進網頁：元素佔版面，並把網頁的手勢回傳給原生端。顯示有兩種模式：鏡像由原生端擷取畫面、傳到元素裡的畫布；穿透讓原生內容直接畫在透明的 WebView 下面，元素只回報自己的位置與大小。`mode` 屬性選擇（預設 `auto`），兩種模式共用同一組手勢與事件，模式由原生端在每次連線時決定。穿透時元素會自動讓出後方的頁面背景：祖先的不透明背景暫時變透明，標了 `data-aqutter-bg` 的底層背景層在元素位置挖洞，離開穿透就還原。
 
 ## 運作方式
 
@@ -50,18 +50,30 @@
 
 來源：1. [layout.ts](../../../src/nativeview/layout.ts)
 
+### 穿透時讓出頁面背景
+
+1. 協商成穿透後，元素往上到根元素的每個祖先，不透明的背景色與背景圖暫時改成透明。
+2. 頁面上標了 `data-aqutter-bg` 的底層背景層（例如鋪滿畫面的固定層），用遮罩在元素的位置挖洞；洞的圓角取自元素的圓角設定。
+3. 洞跟著元素的位置與大小更新，捲動時也一樣。
+4. 退回鏡像、斷線或元素移除時，所有改動還原。
+5. 元素加上 `keep-background` 屬性就不做這些，頁面自己負責。
+
+來源：1. [seeThrough.ts](../../../src/nativeview/seeThrough.ts)　2. [element.ts](../../../src/nativeview/element.ts)
+
 ## 規則
 
 | 項目 | 說明 |
 |---|---|
 | `mode` 屬性 | `auto`（預設）、`mirror`、`passthrough`；不合法的值視為 `auto` 並警告一次 |
-| 頁面可穿透 | 元素往上到根元素的每個祖先，背景色不透明度都小於 0.99 且沒有背景圖 |
-| 偵測範圍 | 不涵蓋兄弟元素、偽元素、陰影遮罩；明確指定 `passthrough` 不偵測 |
+| 頁面可穿透 | 預設一律視為可穿透（祖先背景會自動讓出）；加了 `keep-background` 時才偵測：元素往上到根元素的每個祖先，背景色不透明度都小於 0.99 且沒有背景圖 |
+| 自動處理的範圍 | 祖先背景，以及標了 `data-aqutter-bg` 的層；不涵蓋沒標記的兄弟元素、偽元素、陰影遮罩 |
+| `data-aqutter-bg` | 標在底層背景層上；標記的層不可以是元素的祖先 |
+| `keep-background` | 元素屬性；關閉自動讓出背景，並讓 `auto` 回到偵測頁面條件 |
 | 手勢 | 兩種模式相同，座標是相對元素的 0 到 1 |
 | 事件 | 模式確定後觸發 `aqutter-mode`（模式與原因）；`aqutter-frame` 只在鏡像出現 |
 | 觸控 | 元素的 `touch-action` 為 `none`，手指從元素內開始滑動是操作原生內容、不捲動頁面 |
 
-來源：1. [element.ts](../../../src/nativeview/element.ts)　2. [layout.ts](../../../src/nativeview/layout.ts)
+來源：1. [element.ts](../../../src/nativeview/element.ts)　2. [layout.ts](../../../src/nativeview/layout.ts)　3. [seeThrough.ts](../../../src/nativeview/seeThrough.ts)
 
 ---
 [🏠 Wiki](../index.md)

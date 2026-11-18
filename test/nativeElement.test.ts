@@ -82,10 +82,45 @@ describe('<aqutter-native> mode', () => {
     expect(socket.messages[0]).toEqual({ type: 'mode', request: 'auto', pageReady: true })
   })
 
-  it('reports pageReady false when an ancestor is opaque', async () => {
+  it('reports pageReady true even when an ancestor is opaque (it is cleared while passthrough)', async () => {
     document.body.style.backgroundColor = 'rgb(255, 255, 255)'
     const { socket } = await mountElement({ mode: 'auto' })
+    expect(socket.messages[0]).toMatchObject({ request: 'auto', pageReady: true })
+    document.body.removeAttribute('style')
+  })
+
+  it('keep-background: reports pageReady false when an ancestor is opaque', async () => {
+    document.body.style.backgroundColor = 'rgb(255, 255, 255)'
+    const { socket } = await mountElement({ 'mode': 'auto', 'keep-background': '' })
     expect(socket.messages[0]).toMatchObject({ request: 'auto', pageReady: false })
+    document.body.removeAttribute('style')
+  })
+
+  it('passthrough clears opaque ancestor backgrounds and restores them when it falls back to mirror', async () => {
+    document.body.style.backgroundColor = 'rgb(255, 255, 255)'
+    const { socket } = await mountElement()
+    socket.reply({ type: 'mode', mode: 'passthrough' })
+    expect(document.body.style.getPropertyValue('background-color')).toBe('transparent')
+    socket.reply({ type: 'mode', mode: 'mirror' })
+    expect(document.body.style.getPropertyValue('background-color')).toBe('rgb(255, 255, 255)')
+    document.body.removeAttribute('style')
+  })
+
+  it('passthrough restores the backgrounds when the element is removed', async () => {
+    document.body.style.backgroundColor = 'rgb(255, 255, 255)'
+    const { element, socket } = await mountElement()
+    socket.reply({ type: 'mode', mode: 'passthrough' })
+    expect(document.body.style.getPropertyValue('background-color')).toBe('transparent')
+    element.remove()
+    expect(document.body.style.getPropertyValue('background-color')).toBe('rgb(255, 255, 255)')
+    document.body.removeAttribute('style')
+  })
+
+  it('keep-background: passthrough leaves the page backgrounds alone', async () => {
+    document.body.style.backgroundColor = 'rgb(255, 255, 255)'
+    const { socket } = await mountElement({ 'keep-background': '' })
+    socket.reply({ type: 'mode', mode: 'passthrough' })
+    expect(document.body.style.getPropertyValue('background-color')).toBe('rgb(255, 255, 255)')
     document.body.removeAttribute('style')
   })
 
