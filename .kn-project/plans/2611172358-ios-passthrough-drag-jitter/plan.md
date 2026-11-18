@@ -25,7 +25,7 @@ iOS 穿透時手指拖地圖會抖（網頁轉送手勢路徑，iPad 實機確�
 - **合併後的連動**: `aqutter` manifest 同步 js 新 ref、`aqutter-cli` snapshot、`aqutter-nuxt-app` 鎖定檔前進。
 
 ## Contract / 介面契約
-- **契約正本 repo**: `aqutter_core`　**修訂號**: `rev 2`　**狀態**: `凍結（核准日 2026-11-18）`
+- **契約正本 repo**: `aqutter_core`　**修訂號**: `rev 3`　**狀態**: `凍結（核准日 2026-11-18）`
 
 ### 1. 端點
 本契約沒有 HTTP 端點。介面是既有的「網頁 → 原生」穿透訊息 `layout`（WebSocket JSON，`aqutter-js` 送、`aqutter_core` 收）新增一個欄位，加上 core 對 plugin 暴露一個旗標。
@@ -33,7 +33,7 @@ iOS 穿透時手指拖地圖會抖（網頁轉送手勢路徑，iPad 實機確�
 | # | 介面 | 方向 | 用途 |
 |---|---|---|---|
 | 1 | `layout` 訊息新增欄位 `webRegions` | `aqutter-js` → `aqutter_core` | 回報元素矩形內「網頁要接管觸控」的區域 |
-| 2 | `AqutterNativeTouch.of(BuildContext)`（回傳 `ValueListenable<bool>`，`AqutterNative` 的 child 底下可讀；從 `package:aqutter_core/aqutter_core.dart` 匯出） | `aqutter_core` → plugin | 告訴 plugin 目前觸控是否直接進原生（plugin 據此在原生 view 的手勢競技場宣告） |
+| 2 | `AqutterNativeTouch.of(BuildContext)`（回傳 `ValueListenable<bool>`，`AqutterNative` 的 child 底下可讀；從 `package:aqutter_core/aqutter_core.dart` 匯出，並由殼 `package:aqutter/aqutter.dart` 轉出；plugin 只依賴殼，從殼取用） | `aqutter_core` → plugin | 告訴 plugin 目前觸控是否直接進原生（plugin 據此在原生 view 的手勢競技場宣告） |
 
 ### 2. 欄位
 **#1 `layout`（既有欄位不變，僅新增）**
@@ -69,6 +69,7 @@ iOS 穿透時手指拖地圖會抖（網頁轉送手勢路徑，iPad 實機確�
 
 ### 6. 變更紀錄
 - 2026-11-18　rev 1 → rev 2：(1) 介面 #2 由「`AqutterNativeContext.nativeTouch`」改為 `AqutterNativeTouch.of(context)`——plugin 實際拿到的 `AqutterPluginContext` 來自殼套件 `aqutter`，加欄位要動殼；改由 core 以 `InheritedNotifier` 提供，plugin 在 `AqutterNative` 的 child 內讀取，殼維持不動。(2) 區域邊界歸屬改為「不保證（±1px）」（原寫邊界屬於網頁，Dart `Rect.contains` 與 UIKit `CGRect.contains` 都是左上含、右下不含，無法逐字保證）。影響：`aqutter_core`（已依 rev 2 實作）、`aqutter-plugins`（讀取方式）；`aqutter-js` 不受影響。
+- 2026-11-18　rev 2 → rev 3：`AqutterNativeTouch` 要能被 plugin 取用，但 plugin 只依賴殼套件 `aqutter`，殼對 core 的轉出是 `show` 清單，沒有列入就看不到。改為由殼在 `lib/aqutter.dart` 把 `AqutterNativeTouch` 加入轉出清單（殼多一行改動，納入本計畫成為第四個 repo）。影響：`aqutter`（新增，issue 另建）、`aqutter-plugins`（從殼取用）；`aqutter_core`、`aqutter-js` 不受影響。
 
 ## Impact Files
 - `src/nativeview/layout.ts:12`（`AqutterNativeLayout`）、`:69`（`trackLayout`）— 新增 `webRegions` 欄位、取樣與合併、節流與觸發
