@@ -174,7 +174,7 @@ const createElementClass = (): CustomElementConstructor => {
         this.layoutTracker = trackLayout(this, (layout) => {
           seeThrough?.update(layout)
           return this.mirror?.sendLayout(layout) ?? false
-        })
+        }, { sampleRegions: isIosTouch() })
       }
       else {
         this.attachCanvas()

@@ -5,6 +5,9 @@
  * 元素移動（任何祖先捲動）、改變大小、視窗改變、頁面可見性改變時都要回報。
  */
 
+import { sampleWebRegions } from './webRegions'
+import type { AqutterWebRegion } from './webRegions'
+
 /** `{"type":"layout",...}`：元素的矩形，CSS 像素，相對 WebView 視窗左上角（`getBoundingClientRect()`）。 */
 export interface AqutterNativeLayout {
   type: 'layout'
@@ -16,6 +19,11 @@ export interface AqutterNativeLayout {
   visible: boolean
   /** 送出時的 epoch 毫秒，供原生端量傳遞延遲。 */
   sentAt: number
+  /**
+   * 元素矩形內「網頁要接管觸控」的區域（相對元素左上角）。有這個欄位（含空陣列）表示這個 client 支援原生觸控，
+   * 元素矩形扣掉這些區域的部分，觸控可以直接交給原生；沒有這個欄位則觸控全部走網頁。
+   */
+  webRegions?: AqutterWebRegion[]
 }
 
 /** 量測元素目前的矩形與可見性。 */
@@ -33,8 +41,17 @@ export const measureLayout = (element: Element): AqutterNativeLayout => {
   }
 }
 
+const sameRegions = (a?: AqutterWebRegion[], b?: AqutterWebRegion[]): boolean => {
+  if (a === b) {
+    return true
+  }
+  return !!a && !!b && a.length === b.length
+    && a.every((r, i) => r.x === b[i]!.x && r.y === b[i]!.y && r.width === b[i]!.width && r.height === b[i]!.height)
+}
+
 const sameLayout = (a: AqutterNativeLayout, b: AqutterNativeLayout): boolean =>
   a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height && a.visible === b.visible
+  && sameRegions(a.webRegions, b.webRegions)
 
 /** 排程到下一個動畫畫面；沒有 `requestAnimationFrame` 的環境退回 setTimeout。 */
 const scheduleFrame = (callback: () => void): number => {
@@ -66,11 +83,46 @@ export interface AqutterLayoutTracker {
   flush: () => void
 }
 
-export const trackLayout = (element: Element, send: (layout: AqutterNativeLayout) => boolean): AqutterLayoutTracker => {
+/** 網頁區域取樣的最短間隔（毫秒）。 */
+export const WEB_REGION_SAMPLE_INTERVAL = 100
+
+export interface AqutterLayoutOptions {
+  /** 一併取樣並回報 `webRegions`（原生觸控用）。預設 `false`。 */
+  sampleRegions?: boolean
+}
+
+export const trackLayout = (
+  element: Element,
+  send: (layout: AqutterNativeLayout) => boolean,
+  options: AqutterLayoutOptions = {},
+): AqutterLayoutTracker => {
   let frame = 0
   let scheduled = false
   let last: AqutterNativeLayout | null = null
   let stopped = false
+  let regions: AqutterWebRegion[] | undefined
+  let regionsDirty = true
+  let lastSampleAt = Number.NEGATIVE_INFINITY
+  let sampleTimer: ReturnType<typeof setTimeout> | null = null
+  const clock = (): number => typeof performance === 'undefined' ? Date.now() : performance.now()
+
+  /** 取樣（有節流）：太快就排一個 trailing 的重新回報，之後那次才會真正取樣。 */
+  const sampleIfDue = (force: boolean): void => {
+    if (!regionsDirty && !force) {
+      return
+    }
+    const wait = WEB_REGION_SAMPLE_INTERVAL - (clock() - lastSampleAt)
+    if (!force && wait > 0) {
+      sampleTimer ??= setTimeout(() => {
+        sampleTimer = null
+        schedule()
+      }, wait)
+      return
+    }
+    regions = sampleWebRegions(element)
+    regionsDirty = false
+    lastSampleAt = clock()
+  }
 
   const report = (force: boolean): void => {
     scheduled = false
@@ -78,6 +130,15 @@ export const trackLayout = (element: Element, send: (layout: AqutterNativeLayout
       return
     }
     const next = measureLayout(element)
+    if (options.sampleRegions) {
+      if (next.visible) {
+        sampleIfDue(force)
+      }
+      const known = next.visible ? regions : []
+      if (known) {
+        next.webRegions = known
+      }
+    }
     if (!force && last && sameLayout(last, next)) {
       return
     }
@@ -86,6 +147,7 @@ export const trackLayout = (element: Element, send: (layout: AqutterNativeLayout
     }
   }
   const schedule = (): void => {
+    regionsDirty = true
     if (scheduled || stopped) {
       return
     }
@@ -95,6 +157,9 @@ export const trackLayout = (element: Element, send: (layout: AqutterNativeLayout
 
   const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
   observer?.observe(element)
+  // 疊在元素上的網頁內容改變（新增、移除、class／style 變動）時，網頁區域也會變
+  const mutations = options.sampleRegions && typeof MutationObserver !== 'undefined' ? new MutationObserver(schedule) : null
+  mutations?.observe(document.documentElement, { subtree: true, childList: true, attributes: true })
   window.addEventListener('scroll', schedule, { capture: true, passive: true })
   window.addEventListener('resize', schedule, { passive: true })
   document.addEventListener('visibilitychange', schedule)
@@ -107,6 +172,11 @@ export const trackLayout = (element: Element, send: (layout: AqutterNativeLayout
         cancelFrame(frame)
       }
       observer?.disconnect()
+      mutations?.disconnect()
+      if (sampleTimer) {
+        clearTimeout(sampleTimer)
+        sampleTimer = null
+      }
       window.removeEventListener('scroll', schedule, { capture: true })
       window.removeEventListener('resize', schedule)
       document.removeEventListener('visibilitychange', schedule)
