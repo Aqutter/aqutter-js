@@ -63,6 +63,30 @@ describe('clearAncestorBackgrounds', () => {
     restore()
   })
 
+  it('shared ancestors are released by the last holder only (either stop order)', () => {
+    document.body.innerHTML = '<div id="wrapper" style="background-color: rgb(1, 2, 3)"><div id="a"></div><div id="b"></div></div>'
+    const wrapper = document.getElementById('wrapper') as HTMLElement
+    const a = document.getElementById('a') as HTMLElement
+    const b = document.getElementById('b') as HTMLElement
+
+    const releaseA = clearAncestorBackgrounds(a)
+    const releaseB = clearAncestorBackgrounds(b)
+    expect(wrapper.style.getPropertyValue('background-color')).toBe('transparent')
+    releaseA()
+    expect(wrapper.style.getPropertyValue('background-color')).toBe('transparent')
+    releaseB()
+    expect(wrapper.style.getPropertyValue('background-color')).toBe('rgb(1, 2, 3)')
+
+    const releaseA2 = clearAncestorBackgrounds(a)
+    const releaseB2 = clearAncestorBackgrounds(b)
+    releaseB2()
+    expect(wrapper.style.getPropertyValue('background-color')).toBe('transparent')
+    releaseB2()
+    expect(wrapper.style.getPropertyValue('background-color')).toBe('transparent')
+    releaseA2()
+    expect(wrapper.style.getPropertyValue('background-color')).toBe('rgb(1, 2, 3)')
+  })
+
   it('looks through a shadow root to its host', () => {
     document.body.innerHTML = '<div id="host" style="background-color: rgb(1, 2, 3)"></div>'
     const host = document.getElementById('host') as HTMLElement
@@ -105,7 +129,7 @@ describe('startSeeThrough marked layers', () => {
   it('cuts a hole at the element rect, relative to the layer, and follows updates', () => {
     const seeThrough = startSeeThrough(element)
     seeThrough.update(layout())
-    expect(layer.style.getPropertyValue('mask-composite')).toBe('exclude')
+    expect(layer.style.getPropertyValue('mask-composite')).toBe('subtract, add')
     expect(layer.style.getPropertyValue('mask-position')).toBe('0 0, 40px 200px')
     expect(layer.style.getPropertyValue('mask-size')).toBe('100% 100%, 320px 300px')
     expect(decodeURIComponent(layer.style.getPropertyValue('mask-image'))).toContain('A24 24')
@@ -153,7 +177,7 @@ describe('startSeeThrough marked layers', () => {
     late.getBoundingClientRect = rectOf(0, 0, 400, 800)
     document.body.append(late)
     await new Promise(resolve => setTimeout(resolve, 0))
-    expect(late.style.getPropertyValue('mask-composite')).toBe('exclude')
+    expect(late.style.getPropertyValue('mask-composite')).toBe('subtract, add')
 
     layer.removeAttribute(AQUTTER_BG_ATTRIBUTE)
     await new Promise(resolve => setTimeout(resolve, 0))
@@ -167,5 +191,72 @@ describe('startSeeThrough marked layers', () => {
     seeThrough.stop()
     seeThrough.update(layout())
     expect(layer.style.getPropertyValue('mask-image')).toBe('')
+  })
+})
+
+describe('several passthrough elements on one page', () => {
+  let first: HTMLElement
+  let second: HTMLElement
+  let layer: HTMLElement
+
+  beforeEach(() => {
+    document.documentElement.removeAttribute('style')
+    document.body.innerHTML = `<div id="bg" ${AQUTTER_BG_ATTRIBUTE} style="background: red"></div><div id="card" style="background-color: rgb(9, 9, 9)"><div id="one" style="border-radius: 16px"></div><div id="two"></div></div>`
+    first = document.getElementById('one') as HTMLElement
+    second = document.getElementById('two') as HTMLElement
+    layer = document.getElementById('bg') as HTMLElement
+    layer.getBoundingClientRect = rectOf(0, 0, 400, 800)
+  })
+
+  it('keeps one hole per element on the same layer', () => {
+    const a = startSeeThrough(first)
+    const b = startSeeThrough(second)
+    a.update(layout({ top: 100, height: 200 }))
+    b.update(layout({ top: 500, height: 150 }))
+    expect(layer.style.getPropertyValue('mask-composite')).toBe('subtract, add, add')
+    expect(layer.style.getPropertyValue('-webkit-mask-composite')).toBe('source-out, source-over, source-over')
+    expect(layer.style.getPropertyValue('mask-position')).toBe('0 0, 40px 100px, 40px 500px')
+    expect(layer.style.getPropertyValue('mask-size')).toBe('100% 100%, 320px 200px, 320px 150px')
+
+    // 一個元素移動只更新自己的洞
+    a.update(layout({ top: 120, height: 200 }))
+    expect(layer.style.getPropertyValue('mask-position')).toBe('0 0, 40px 120px, 40px 500px')
+    a.stop()
+    b.stop()
+  })
+
+  it('stopping one element removes only its own hole; the last one restores the layer', () => {
+    const a = startSeeThrough(first)
+    const b = startSeeThrough(second)
+    a.update(layout({ top: 100 }))
+    b.update(layout({ top: 500 }))
+    a.stop()
+    expect(layer.style.getPropertyValue('mask-position')).toBe('0 0, 40px 500px')
+    expect(layer.style.getPropertyValue('mask-composite')).toBe('subtract, add')
+    b.stop()
+    expect(layer.style.getPropertyValue('mask-image')).toBe('')
+    expect(layer.style.getPropertyValue('background')).toBe('red')
+  })
+
+  it('an element that becomes invisible drops its hole but not the other one', () => {
+    const a = startSeeThrough(first)
+    const b = startSeeThrough(second)
+    a.update(layout({ top: 100 }))
+    b.update(layout({ top: 500 }))
+    a.update(layout({ top: 100, visible: false }))
+    expect(layer.style.getPropertyValue('mask-position')).toBe('0 0, 40px 500px')
+    a.stop()
+    b.stop()
+  })
+
+  it('the shared card background stays transparent until the last element stops', () => {
+    const card = document.getElementById('card') as HTMLElement
+    const a = startSeeThrough(first)
+    const b = startSeeThrough(second)
+    expect(card.style.getPropertyValue('background-color')).toBe('transparent')
+    a.stop()
+    expect(card.style.getPropertyValue('background-color')).toBe('transparent')
+    b.stop()
+    expect(card.style.getPropertyValue('background-color')).toBe('rgb(9, 9, 9)')
   })
 })

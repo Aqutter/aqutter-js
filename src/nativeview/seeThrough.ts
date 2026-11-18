@@ -60,10 +60,29 @@ const styleOf = (node: Element): CSSStyleDeclaration | null => {
 
 const CLEAR_PROPERTIES = ['background-color', 'background-image'] as const
 
-/** 把 [element] 往上的祖先中，會蓋住後方的不透明背景改成透明。回傳還原函式。 */
+/** 一個祖先被清掉背景前的行內樣式，與目前有幾個穿透元素在使用（同頁多個元素共用祖先時，最後一個釋放才還原）。 */
+interface AncestorState {
+  saved: SavedProperty[]
+  count: number
+}
+
+const ancestorStates = new Map<Element, AncestorState>()
+
+/**
+ * 把 [element] 往上的祖先中，會蓋住後方的不透明背景改成透明。回傳釋放函式。
+ *
+ * 祖先用引用計數：第一個需要清的元素儲存原行內樣式並設透明，之後的元素只增加計數；
+ * 釋放時減計數，歸零才還原。所以同頁多個穿透元素共用祖先時，先停止的不會把還在使用的祖先還原成不透明。
+ */
 export const clearAncestorBackgrounds = (element: Element): (() => void) => {
-  const restores: (() => void)[] = []
+  const held: Element[] = []
   for (let node = parentOf(element); node; node = parentOf(node)) {
+    const existing = ancestorStates.get(node)
+    if (existing) {
+      existing.count += 1
+      held.push(node)
+      continue
+    }
     const style = styleOf(node)
     if (!style) {
       continue
@@ -83,9 +102,30 @@ export const clearAncestorBackgrounds = (element: Element): (() => void) => {
     for (const name of names) {
       style.setProperty(name, name === 'background-image' ? 'none' : 'transparent', 'important')
     }
-    restores.push(() => restore(style, saved))
+    ancestorStates.set(node, { saved, count: 1 })
+    held.push(node)
   }
-  return () => restores.forEach(run => run())
+  let released = false
+  return () => {
+    if (released) {
+      return
+    }
+    released = true
+    for (const node of held) {
+      const state = ancestorStates.get(node)
+      if (!state) {
+        continue
+      }
+      state.count -= 1
+      if (state.count <= 0) {
+        const style = styleOf(node)
+        if (style) {
+          restore(style, state.saved)
+        }
+        ancestorStates.delete(node)
+      }
+    }
+  }
 }
 
 const MASK_PROPERTIES = [
@@ -134,28 +174,93 @@ export const roundedRectSvg = (width: number, height: number, [tl, tr, br, bl]: 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${path}" fill="#000"/></svg>`
 }
 
-const holeMask = (svg: string, x: number, y: number, width: number, height: number): Record<string, string> => {
-  const image = `linear-gradient(#000, #000), url("data:image/svg+xml,${encodeURIComponent(svg)}")`
-  const size = `100% 100%, ${+width.toFixed(2)}px ${+height.toFixed(2)}px`
-  const position = `0 0, ${+x.toFixed(2)}px ${+y.toFixed(2)}px`
-  return {
-    'mask-image': image,
-    'mask-size': size,
-    'mask-position': position,
+/** 一個穿透元素在標記層上挖的洞：位置相對於層、大小與圓角。 */
+interface Hole {
+  x: number
+  y: number
+  width: number
+  height: number
+  svg: string
+}
+
+/** 一個標記層：原行內遮罩樣式，與目前每個穿透元素各自的洞（同頁多個元素共用同一層）。 */
+interface LayerState {
+  saved: SavedProperty[]
+  holes: Map<object, Hole>
+}
+
+const layerStates = new Map<Element, LayerState>()
+
+const px = (value: number): string => `${+value.toFixed(2)}px`
+
+/**
+ * 依層上所有的洞重建遮罩：整層減去所有洞的聯集。
+ * 圖層順序是 [整層, 洞1, 洞2…]，`mask-composite` 的每個值是該圖層與它下面的圖層的合成方式：
+ * 洞之間 `add`（聯集），最上面的整層用 `subtract`（減去聯集），所以洞重疊時不會像 `exclude` 那樣反轉。
+ */
+const renderMask = (style: CSSStyleDeclaration, holes: Iterable<Hole>): void => {
+  const list = Array.from(holes)
+  const images = ['linear-gradient(#000, #000)', ...list.map(hole => `url("data:image/svg+xml,${encodeURIComponent(hole.svg)}")`)]
+  const sizes = ['100% 100%', ...list.map(hole => `${px(hole.width)} ${px(hole.height)}`)]
+  const positions = ['0 0', ...list.map(hole => `${px(hole.x)} ${px(hole.y)}`)]
+  const composite = ['subtract', ...list.map(() => 'add')]
+  const webkitComposite = ['source-out', ...list.map(() => 'source-over')]
+  const values: Record<string, string> = {
+    'mask-image': images.join(', '),
+    'mask-size': sizes.join(', '),
+    'mask-position': positions.join(', '),
     'mask-repeat': 'no-repeat',
-    'mask-composite': 'exclude',
-    '-webkit-mask-image': image,
-    '-webkit-mask-size': size,
-    '-webkit-mask-position': position,
+    'mask-composite': composite.join(', '),
+    '-webkit-mask-image': images.join(', '),
+    '-webkit-mask-size': sizes.join(', '),
+    '-webkit-mask-position': positions.join(', '),
     '-webkit-mask-repeat': 'no-repeat',
-    '-webkit-mask-composite': 'xor',
+    '-webkit-mask-composite': webkitComposite.join(', '),
+  }
+  for (const [name, value] of Object.entries(values)) {
+    style.setProperty(name, value)
   }
 }
 
-/** 開始處理：祖先背景立刻清掉；標記層在每次 [AqutterSeeThrough.update] 依矩形挖洞。 */
+const setHole = (layer: Element, owner: object, hole: Hole): void => {
+  const style = styleOf(layer)
+  if (!style) {
+    return
+  }
+  let state = layerStates.get(layer)
+  if (!state) {
+    state = { saved: save(style, MASK_PROPERTIES), holes: new Map() }
+    layerStates.set(layer, state)
+  }
+  state.holes.set(owner, hole)
+  renderMask(style, state.holes.values())
+}
+
+/** 移除 [owner] 在 [layer] 的洞；層上沒有洞了就還原行內樣式。 */
+const removeHole = (layer: Element, owner: object): void => {
+  const state = layerStates.get(layer)
+  if (!state || !state.holes.delete(owner)) {
+    return
+  }
+  const style = styleOf(layer)
+  if (!style) {
+    layerStates.delete(layer)
+    return
+  }
+  if (state.holes.size === 0) {
+    restore(style, state.saved)
+    layerStates.delete(layer)
+  }
+  else {
+    renderMask(style, state.holes.values())
+  }
+}
+
+/** 開始處理：祖先背景立刻清掉；標記層在每次 [AqutterSeeThrough.update] 依矩形挖洞。多個元素各自登記自己的洞。 */
 export const startSeeThrough = (element: Element): AqutterSeeThrough => {
-  const restoreAncestors = clearAncestorBackgrounds(element)
-  const layers = new Map<Element, SavedProperty[]>()
+  const releaseAncestors = clearAncestorBackgrounds(element)
+  const owner = {}
+  const layers = new Set<Element>()
   let last: AqutterNativeLayout | null = null
   let stopped = false
 
@@ -169,24 +274,19 @@ export const startSeeThrough = (element: Element): AqutterSeeThrough => {
   }
 
   const apply = (layer: Element, layout: AqutterNativeLayout): void => {
-    const style = styleOf(layer)
-    if (!style) {
-      return
-    }
-    if (!layers.has(layer)) {
-      layers.set(layer, save(style, MASK_PROPERTIES))
-    }
-    const saved = layers.get(layer)!
     if (!layout.visible || layout.width <= 0 || layout.height <= 0) {
-      restore(style, saved)
+      removeHole(layer, owner)
       return
     }
     const box = layer.getBoundingClientRect()
     const radii = readCornerRadii(element, layout.width, layout.height)
-    const mask = holeMask(roundedRectSvg(layout.width, layout.height, radii), layout.left - box.left, layout.top - box.top, layout.width, layout.height)
-    for (const [name, value] of Object.entries(mask)) {
-      style.setProperty(name, value)
-    }
+    setHole(layer, owner, {
+      x: layout.left - box.left,
+      y: layout.top - box.top,
+      width: layout.width,
+      height: layout.height,
+      svg: roundedRectSvg(layout.width, layout.height, radii),
+    })
   }
 
   const update = (layout: AqutterNativeLayout): void => {
@@ -196,15 +296,13 @@ export const startSeeThrough = (element: Element): AqutterSeeThrough => {
     last = layout
     const found = Array.from(document.querySelectorAll(`[${AQUTTER_BG_ATTRIBUTE}]`)).filter(layer => layer !== element && !isAncestor(layer))
     for (const layer of found) {
+      layers.add(layer)
       apply(layer, layout)
     }
-    // 不再被標記的層（屬性被拿掉）要還原
-    for (const [layer, saved] of layers) {
+    // 不再被標記的層（屬性被拿掉）要移除自己的洞
+    for (const layer of layers) {
       if (!found.includes(layer)) {
-        const style = styleOf(layer)
-        if (style) {
-          restore(style, saved)
-        }
+        removeHole(layer, owner)
         layers.delete(layer)
       }
     }
@@ -228,14 +326,11 @@ export const startSeeThrough = (element: Element): AqutterSeeThrough => {
       }
       stopped = true
       observer?.disconnect()
-      for (const [layer, saved] of layers) {
-        const style = styleOf(layer)
-        if (style) {
-          restore(style, saved)
-        }
+      for (const layer of layers) {
+        removeHole(layer, owner)
       }
       layers.clear()
-      restoreAncestors()
+      releaseAncestors()
     },
   }
 }
