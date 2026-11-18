@@ -6,6 +6,8 @@ export { DEFAULT_GESTURE_OPTIONS, DOUBLE_TAP_GRACE_MS, GestureRecognizer, IOS_GE
 export type { GestureOptions, GesturePhase, AqutterNativeGesture, Scheduler } from './gestures'
 export { toPointerMessage } from './pointer'
 export type { AqutterNativePointer, AqutterNativePointerPhase, PointerLike } from './pointer'
+export { MAX_WEB_REGIONS, sampleWebRegions, WEB_REGION_STEP } from './webRegions'
+export type { AqutterWebRegion } from './webRegions'
 export { cssColorAlpha, detectPageReady, measureLayout, OPAQUE_ALPHA, trackLayout } from './layout'
 export type { AqutterLayoutTracker, AqutterNativeLayout } from './layout'
 export { AqutterNative } from './native'

@@ -50,6 +50,18 @@
 
 來源：1. [layout.ts](../../../src/nativeview/layout.ts)
 
+### 穿透時回報網頁區域（iOS 原生觸控）
+
+iOS 穿透時，觸控落在元素內、且該點網頁沒有要接管的內容，原生端會直接把觸控交給原生 view（比經網頁轉送平順）。原生端需要知道元素內哪些地方是網頁內容，所以 `layout` 訊息多一個 `webRegions`：
+
+1. 只在 iOS 觸控環境（含 iPadOS 回報成 Mac 的情形）取樣與回報；其他環境不帶這個欄位，原生端視為「觸控全部走網頁」。
+2. 以 8 CSS 像素為格，格中心呼叫 `document.elementFromPoint`：命中元素本身（含 shadow 內部）或沒命中任何東西算原生，其餘算網頁；所以 `pointer-events`、堆疊順序、不透明覆蓋都照 DOM 語意。沒有 `pointer-events: none` 的裝飾層（例如漸層遮罩）算網頁區域。
+3. 同類相鄰格合成矩形，座標相對元素左上角；超過 64 個矩形時改取每個橫帶的外框（網頁區域只會變大），仍超過就用整體外框。視窗外的部分不取樣。
+4. 取樣節流：至少間隔 100 毫秒；元素大小、祖先捲動、視窗大小、可見性、`document` 子樹的 DOM／class／style 變動都會讓下一次取樣重做。元素不可見時回報空清單。
+5. 沒有 `document.elementFromPoint` 的環境不帶這個欄位。
+
+來源：1. [webRegions.ts](../../../src/nativeview/webRegions.ts)　2. [layout.ts](../../../src/nativeview/layout.ts)
+
 ### 穿透時讓出頁面背景
 
 1. 協商成穿透後，元素往上到根元素的每個祖先，不透明的背景色與背景圖暫時改成透明。
