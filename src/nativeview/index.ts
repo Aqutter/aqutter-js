@@ -10,3 +10,5 @@ export { cssColorAlpha, detectPageReady, measureLayout, OPAQUE_ALPHA, trackLayou
 export type { AqutterLayoutTracker, AqutterNativeLayout } from './layout'
 export { AqutterNative } from './native'
 export type { AqutterNativeEffectiveMode, AqutterNativeEndpoint, AqutterNativeFit, AqutterNativeMessage, AqutterNativeModeInfo, AqutterNativeModeReason, AqutterNativeModeRequest, AqutterNativeOptions, AqutterNativeViewportInfo } from './native'
+export { AQUTTER_BG_ATTRIBUTE, clearAncestorBackgrounds, startSeeThrough } from './seeThrough'
+export type { AqutterSeeThrough } from './seeThrough'
